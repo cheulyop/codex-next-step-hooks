@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 import unittest
 from contextlib import redirect_stdout
 from io import StringIO
+from pathlib import Path
 
 from codex_next_step_hooks.hooks import session_start_request_user_input_policy
 from codex_next_step_hooks.hooks.stop_require_request_user_input import (
@@ -15,6 +19,54 @@ from codex_next_step_hooks.hooks.stop_require_request_user_input import (
 
 
 class PolicyTextTests(unittest.TestCase):
+    def test_legacy_hook_paths_run_without_pythonpath(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        env = os.environ.copy()
+        env.pop("PYTHONPATH", None)
+
+        session_start = subprocess.run(
+            [
+                sys.executable,
+                str(
+                    root
+                    / "src"
+                    / "codex_click_chooser_hooks"
+                    / "hooks"
+                    / "session_start_request_user_input_policy.py"
+                ),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=root,
+        )
+        session_payload = json.loads(session_start.stdout)
+        self.assertEqual(
+            session_payload["hookSpecificOutput"]["hookEventName"], "SessionStart"
+        )
+
+        stop_hook = subprocess.run(
+            [
+                sys.executable,
+                str(
+                    root
+                    / "src"
+                    / "codex_click_chooser_hooks"
+                    / "hooks"
+                    / "stop_require_request_user_input.py"
+                ),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            input='{"last_assistant_message": ""}\n',
+            env=env,
+            cwd=root,
+        )
+        stop_payload = json.loads(stop_hook.stdout)
+        self.assertEqual(stop_payload, {"continue": True})
+
     def test_judge_defaults_use_gpt_5_4_with_medium_reasoning(self) -> None:
         self.assertEqual(JUDGE_MODEL, "gpt-5.4")
         self.assertEqual(JUDGE_REASONING_EFFORT, "medium")
