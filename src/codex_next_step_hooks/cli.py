@@ -12,7 +12,7 @@ from .uninstall import run_uninstall
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="codex-click-chooser-hooks")
+    parser = argparse.ArgumentParser(prog="codex-next-step-hooks")
     sub = parser.add_subparsers(dest="command", required=True)
 
     doctor = sub.add_parser("doctor")
@@ -86,15 +86,15 @@ def main() -> int:
         )
     else:
         report = {
-            "repo": "codex-click-chooser-hooks",
+            "repo": "codex-next-step-hooks",
             "paths": [
-                "src/codex_click_chooser_hooks/install.py",
-                "src/codex_click_chooser_hooks/uninstall.py",
-                "src/codex_click_chooser_hooks/merge.py",
-                "src/codex_click_chooser_hooks/runtime_paths.py",
-                "src/codex_click_chooser_hooks/observe.py",
-                "src/codex_click_chooser_hooks/hooks",
-                "src/codex_click_chooser_hooks/templates",
+                "src/codex_next_step_hooks/install.py",
+                "src/codex_next_step_hooks/uninstall.py",
+                "src/codex_next_step_hooks/merge.py",
+                "src/codex_next_step_hooks/runtime_paths.py",
+                "src/codex_next_step_hooks/observe.py",
+                "src/codex_next_step_hooks/hooks",
+                "src/codex_next_step_hooks/templates",
                 "tests/fixtures",
                 "docs",
             ],

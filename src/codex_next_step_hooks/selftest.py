@@ -12,7 +12,7 @@ def package_root() -> Path:
 
 
 def hook_path() -> Path:
-    return package_root() / "src/codex_click_chooser_hooks/hooks/stop_require_request_user_input.py"
+    return package_root() / "src/codex_next_step_hooks/hooks/stop_require_request_user_input.py"
 
 
 def default_case_path() -> Path:

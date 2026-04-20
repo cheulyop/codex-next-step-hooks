@@ -8,7 +8,7 @@ def package_root() -> Path:
 
 
 def package_src_root() -> Path:
-    return package_root() / "src" / "codex_click_chooser_hooks"
+    return package_root() / "src" / "codex_next_step_hooks"
 
 
 def templates_dir() -> Path:

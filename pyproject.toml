@@ -3,18 +3,19 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "codex-click-chooser-hooks"
+name = "codex-next-step-hooks"
 version = "0.1.0"
-description = "Recent-session-aware Codex chooser hooks with install, doctor, and self-test commands"
+description = "Recent-session-aware Codex next-step hooks with install, doctor, and self-test commands"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []
 
 [project.scripts]
-codex-click-chooser-hooks = "codex_click_chooser_hooks.cli:main"
+codex-next-step-hooks = "codex_next_step_hooks.cli:main"
+codex-click-chooser-hooks = "codex_next_step_hooks.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]
-codex_click_chooser_hooks = ["templates/*.json", "hooks/*.py"]
+codex_next_step_hooks = ["templates/*.json", "hooks/*.py"]

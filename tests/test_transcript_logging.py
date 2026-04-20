@@ -11,7 +11,7 @@ from io import StringIO
 from pathlib import Path
 from typing import Any
 
-from codex_click_chooser_hooks.hooks import stop_require_request_user_input as stop_hook
+from codex_next_step_hooks.hooks import stop_require_request_user_input as stop_hook
 
 
 class FakeHTTPResponse:

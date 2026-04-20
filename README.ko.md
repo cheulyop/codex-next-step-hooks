@@ -1,4 +1,4 @@
-# codex-click-chooser-hooks
+# codex-next-step-hooks
 
 [English](README.md) | **한국어** | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
@@ -234,7 +234,7 @@ assistant message에 대해 lightweight message-pattern check를 수행합니다
 이 데이터는 calibration 작업에 유용한 `observe` CLI로 이어집니다.
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --json
 ```
 
 judge endpoint가 unavailable이거나 malformed structured output을 반환하면,
@@ -248,7 +248,7 @@ customize하기 쉽게 만드는 쪽을 의도합니다.
 - `observe`로 실제 transcript-level 판단을 다시 볼 수 있습니다
 - transcript debug event가 rationale, mode, override, turn-shape 데이터를 남깁니다
 - judge prompt는 로컬 코드
-  `src/codex_click_chooser_hooks/hooks/stop_require_request_user_input.py`
+  `src/codex_next_step_hooks/hooks/stop_require_request_user_input.py`
   에 있습니다
 - post-judge override heuristic도 로컬에서 직접 수정할 수 있습니다
 
@@ -281,7 +281,7 @@ customize하기 쉽게 만드는 쪽을 의도합니다.
 ## 구조
 
 ```text
-codex-click-chooser-hooks/
+codex-next-step-hooks/
 ├─ README.md
 ├─ README.ko.md
 ├─ README.ja.md
@@ -291,7 +291,7 @@ codex-click-chooser-hooks/
 ├─ docs/
 │  └─ runtime-contract.md
 ├─ src/
-│  └─ codex_click_chooser_hooks/
+│  └─ codex_next_step_hooks/
 │     ├─ __init__.py
 │     ├─ cli.py
 │     ├─ doctor.py
@@ -315,13 +315,13 @@ codex-click-chooser-hooks/
 ## 빠른 시작
 
 ```bash
-cd /path/to/codex-click-chooser-hooks
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --dry-run --json
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --json
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --live-judge --json
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli self-test --json
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --json
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli print-layout --json
+cd /path/to/codex-next-step-hooks
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --dry-run --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli doctor --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli doctor --live-judge --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli self-test --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli print-layout --json
 ```
 
 ## 설치
@@ -329,20 +329,20 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli print-layout --json
 먼저 변경 사항을 미리 봅니다.
 
 ```bash
-cd /path/to/codex-click-chooser-hooks
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --dry-run --json
+cd /path/to/codex-next-step-hooks
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --dry-run --json
 ```
 
 실제로 설치합니다.
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --json
 ```
 
 필요하면 Python 인터프리터나 Codex home을 직접 지정할 수 있습니다.
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --python /path/to/python --codex-home /path/to/.codex --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --python /path/to/python --codex-home /path/to/.codex --json
 ```
 
 `install`이 하는 일:
@@ -357,25 +357,25 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --python /path/t
 정적 점검:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli doctor --json
 ```
 
 live judge probe:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --live-judge --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli doctor --live-judge --json
 ```
 
 deterministic regression suite:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli self-test --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli self-test --json
 ```
 
 이 repo 기준 최근 stop-hook 판단을 점검:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --json
 ```
 
 기본적으로 `observe`는 현재 working directory 기준으로만 집계합니다.
@@ -384,25 +384,25 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --json
 특정 과거 세션만 보기:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --session-id 019da87f-2a7f-7870-a5aa-84a28745e9db --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --session-id 019da87f-2a7f-7870-a5aa-84a28745e9db --json
 ```
 
 현재 세션과 archived 세션 전체를 함께 보기:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --all-cwds --include-archived --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --all-cwds --include-archived --json
 ```
 
 특정 날짜 범위만 필터링:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --all-cwds --date-from 2026-04-20 --date-to 2026-04-20 --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --all-cwds --date-from 2026-04-20 --date-to 2026-04-20 --json
 ```
 
 특정 mode만 보거나 example 개수를 줄일 수도 있습니다.
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --mode ask_user --limit 3 --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --mode ask_user --limit 3 --json
 ```
 
 ## 제거
@@ -410,19 +410,19 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --mode ask_user 
 먼저 제거 결과를 미리 봅니다.
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli uninstall --dry-run --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli uninstall --dry-run --json
 ```
 
 이 패키지가 추가한 hook 항목을 제거합니다.
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli uninstall --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli uninstall --json
 ```
 
 다른 Codex home을 대상으로 제거할 수도 있습니다.
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli uninstall --codex-home /path/to/.codex --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli uninstall --codex-home /path/to/.codex --json
 ```
 
 `uninstall`은 이 패키지가 추가한 항목만 제거하고, 관련 없는 hook 설정은
@@ -454,8 +454,8 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli uninstall --codex-home /
 
 각 command는 아래 스크립트를 가리킵니다.
 
-- `src/codex_click_chooser_hooks/hooks/session_start_request_user_input_policy.py`
-- `src/codex_click_chooser_hooks/hooks/stop_require_request_user_input.py`
+- `src/codex_next_step_hooks/hooks/session_start_request_user_input_policy.py`
+- `src/codex_next_step_hooks/hooks/stop_require_request_user_input.py`
 
 ## 앞으로 개선할 점
 

@@ -1,4 +1,4 @@
-# codex-click-chooser-hooks
+# codex-next-step-hooks
 
 **English** | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
 
@@ -239,7 +239,7 @@ Every stop-hook decision appends a transcript debug event with fields such as:
 That data feeds the `observe` CLI, which is useful for calibration work:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --json
 ```
 
 If the judge endpoint is unavailable or returns malformed structured output,
@@ -254,7 +254,7 @@ behavior easy to inspect and customize:
 - transcript debug events preserve rationale, mode, override, and turn-shape
   data
 - the judge prompt is local code in
-  `src/codex_click_chooser_hooks/hooks/stop_require_request_user_input.py`
+  `src/codex_next_step_hooks/hooks/stop_require_request_user_input.py`
 - the post-judge override heuristics are also local and editable
 
 The intended workflow is: inspect real outcomes, adjust the prompt or
@@ -286,14 +286,14 @@ heuristics, then rerun `self-test`, `doctor`, and `observe`.
 ## Layout
 
 ```text
-codex-click-chooser-hooks/
+codex-next-step-hooks/
 ├─ README.md
 ├─ LICENSE
 ├─ pyproject.toml
 ├─ docs/
 │  └─ runtime-contract.md
 ├─ src/
-│  └─ codex_click_chooser_hooks/
+│  └─ codex_next_step_hooks/
 │     ├─ __init__.py
 │     ├─ cli.py
 │     ├─ doctor.py
@@ -317,13 +317,13 @@ codex-click-chooser-hooks/
 ## Quick Start
 
 ```bash
-cd /path/to/codex-click-chooser-hooks
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --dry-run --json
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --json
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --live-judge --json
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli self-test --json
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --json
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli print-layout --json
+cd /path/to/codex-next-step-hooks
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --dry-run --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli doctor --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli doctor --live-judge --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli self-test --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli print-layout --json
 ```
 
 ## Install
@@ -331,20 +331,20 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli print-layout --json
 Preview the changes first:
 
 ```bash
-cd /path/to/codex-click-chooser-hooks
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --dry-run --json
+cd /path/to/codex-next-step-hooks
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --dry-run --json
 ```
 
 Apply the install:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --json
 ```
 
 Override the Python interpreter or Codex home if needed:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --python /path/to/python --codex-home /path/to/.codex --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --python /path/to/python --codex-home /path/to/.codex --json
 ```
 
 What `install` does:
@@ -359,25 +359,25 @@ What `install` does:
 Run the static checks:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli doctor --json
 ```
 
 Run the live judge probe:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --live-judge --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli doctor --live-judge --json
 ```
 
 Run the deterministic regression suite:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli self-test --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli self-test --json
 ```
 
 Inspect recent stop-hook judgments for this repo:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --json
 ```
 
 By default, `observe` scopes to the current working directory. Use
@@ -386,25 +386,25 @@ By default, `observe` scopes to the current working directory. Use
 Focus on one historical session:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --session-id 019da87f-2a7f-7870-a5aa-84a28745e9db --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --session-id 019da87f-2a7f-7870-a5aa-84a28745e9db --json
 ```
 
 Scan all current and archived Codex sessions:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --all-cwds --include-archived --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --all-cwds --include-archived --json
 ```
 
 Filter calibration output to a date window:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --all-cwds --date-from 2026-04-20 --date-to 2026-04-20 --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --all-cwds --date-from 2026-04-20 --date-to 2026-04-20 --json
 ```
 
 Filter to one mode or change the example count:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --mode ask_user --limit 3 --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --mode ask_user --limit 3 --json
 ```
 
 ## Uninstall
@@ -412,19 +412,19 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --mode ask_user 
 Preview the removal:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli uninstall --dry-run --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli uninstall --dry-run --json
 ```
 
 Remove the hook entries added by this package:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli uninstall --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli uninstall --json
 ```
 
 Target a different Codex home if needed:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli uninstall --codex-home /path/to/.codex --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli uninstall --codex-home /path/to/.codex --json
 ```
 
 `uninstall` removes only the hook entries added by this package and
@@ -456,8 +456,8 @@ The package template adds one handler under each of these events:
 
 The commands point at:
 
-- `src/codex_click_chooser_hooks/hooks/session_start_request_user_input_policy.py`
-- `src/codex_click_chooser_hooks/hooks/stop_require_request_user_input.py`
+- `src/codex_next_step_hooks/hooks/session_start_request_user_input_policy.py`
+- `src/codex_next_step_hooks/hooks/stop_require_request_user_input.py`
 
 ## Future Improvements
 

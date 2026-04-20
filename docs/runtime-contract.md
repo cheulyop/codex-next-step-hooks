@@ -1,6 +1,6 @@
 # Runtime Contract
 
-`codex-click-chooser-hooks` is a public package for Codex hook workflows.
+`codex-next-step-hooks` is a public package for Codex hook workflows.
 
 This document captures the minimal contract for the judge backend and the
 install-time template rendering flow.
@@ -27,7 +27,7 @@ Defaults:
 
 Implementation:
 
-- `src/codex_click_chooser_hooks/hooks/stop_require_request_user_input.py`
+- `src/codex_next_step_hooks/hooks/stop_require_request_user_input.py`
 
 The judge backend must:
 
@@ -80,7 +80,7 @@ export CODEX_RUI_JUDGE_TIMEOUT_SECONDS=30
 
 ## Install-Time Rendering
 
-The template file `src/codex_click_chooser_hooks/templates/hooks.json`
+The template file `src/codex_next_step_hooks/templates/hooks.json`
 contains `{{python}}` and `{{repo_root}}` placeholders.
 
 The installer renders the template and then merges the resulting commands into
@@ -103,10 +103,10 @@ This package does not currently cover:
 ## Recommended Verification
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --json
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --live-judge --json
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli self-test --json
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --dry-run --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli doctor --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli doctor --live-judge --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli self-test --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --dry-run --json
 ```
 
 `doctor --live-judge` performs a structured probe using the same endpoint and

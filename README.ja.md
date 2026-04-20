@@ -1,4 +1,4 @@
-# codex-click-chooser-hooks
+# codex-next-step-hooks
 
 [English](README.md) | [한국어](README.ko.md) | **日本語** | [简体中文](README.zh-CN.md)
 
@@ -12,7 +12,7 @@
 
 このパッケージは 2 つの managed Codex hook をインストールします。
 
-- 起動時と resume 時に chooser policy を読み込む `SessionStart` hook
+- 起動時と resume 時に next-step policy を読み込む `SessionStart` hook
 - closeout を通常終了するか、同じターンで自動継続するか、短い follow-up chooser を出すか決める `Stop` hook
 
 judge モデルは最近の会話コンテキストを見て `end` / `auto_continue` /
@@ -44,7 +44,7 @@ judge モデルは最近の会話コンテキストを見て `end` / `auto_conti
 ## 構成
 
 ```text
-codex-click-chooser-hooks/
+codex-next-step-hooks/
 ├─ README.md
 ├─ README.ko.md
 ├─ README.ja.md
@@ -54,7 +54,7 @@ codex-click-chooser-hooks/
 ├─ docs/
 │  └─ runtime-contract.md
 ├─ src/
-│  └─ codex_click_chooser_hooks/
+│  └─ codex_next_step_hooks/
 │     ├─ __init__.py
 │     ├─ cli.py
 │     ├─ doctor.py
@@ -77,11 +77,11 @@ codex-click-chooser-hooks/
 ## クイックスタート
 
 ```bash
-cd /path/to/codex-click-chooser-hooks
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --dry-run --json
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --json
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --live-judge --json
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli self-test --json
+cd /path/to/codex-next-step-hooks
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --dry-run --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli doctor --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli doctor --live-judge --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli self-test --json
 ```
 
 ## インストール
@@ -89,14 +89,14 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli self-test --json
 まず変更内容をプレビューします。
 
 ```bash
-cd /path/to/codex-click-chooser-hooks
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --dry-run --json
+cd /path/to/codex-next-step-hooks
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --dry-run --json
 ```
 
 実際に適用します。
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --json
 ```
 
 `install` が行うこと:
@@ -111,19 +111,19 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --json
 静的チェック:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli doctor --json
 ```
 
 live judge probe:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --live-judge --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli doctor --live-judge --json
 ```
 
 deterministic regression suite:
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli self-test --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli self-test --json
 ```
 
 ## アンインストール
@@ -131,13 +131,13 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli self-test --json
 まず削除内容をプレビューします。
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli uninstall --dry-run --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli uninstall --dry-run --json
 ```
 
 managed handler を削除します。
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli uninstall --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli uninstall --json
 ```
 
 `uninstall` はこのパッケージが管理する項目だけを削除し、無関係な hook
@@ -164,8 +164,8 @@ managed template は次のイベントごとに 1 つずつ handler を追加し
 
 各 command は次のスクリプトを指します。
 
-- `src/codex_click_chooser_hooks/hooks/session_start_request_user_input_policy.py`
-- `src/codex_click_chooser_hooks/hooks/stop_require_request_user_input.py`
+- `src/codex_next_step_hooks/hooks/session_start_request_user_input_policy.py`
+- `src/codex_next_step_hooks/hooks/stop_require_request_user_input.py`
 
 ## 今後の改善候補
 

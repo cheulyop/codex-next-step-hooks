@@ -1,4 +1,4 @@
-# codex-click-chooser-hooks
+# codex-next-step-hooks
 
 [English](README.md) | [한국어](README.ko.md) | [日本語](README.ja.md) | **简体中文**
 
@@ -11,7 +11,7 @@
 
 这个包会安装两个受管理的 Codex hook。
 
-- 在启动和 resume 时加载 chooser policy 的 `SessionStart` hook
+- 在启动和 resume 时加载 next-step policy 的 `SessionStart` hook
 - 决定 closeout 是正常结束、在同一轮自动继续，还是显示一个简短 follow-up chooser 的 `Stop` hook
 
 judge 模型会根据最近的对话上下文选择 `end` / `auto_continue` /
@@ -43,7 +43,7 @@ judge 模型会根据最近的对话上下文选择 `end` / `auto_continue` /
 ## 目录结构
 
 ```text
-codex-click-chooser-hooks/
+codex-next-step-hooks/
 ├─ README.md
 ├─ README.ko.md
 ├─ README.ja.md
@@ -53,7 +53,7 @@ codex-click-chooser-hooks/
 ├─ docs/
 │  └─ runtime-contract.md
 ├─ src/
-│  └─ codex_click_chooser_hooks/
+│  └─ codex_next_step_hooks/
 │     ├─ __init__.py
 │     ├─ cli.py
 │     ├─ doctor.py
@@ -76,11 +76,11 @@ codex-click-chooser-hooks/
 ## 快速开始
 
 ```bash
-cd /path/to/codex-click-chooser-hooks
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --dry-run --json
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --json
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --live-judge --json
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli self-test --json
+cd /path/to/codex-next-step-hooks
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --dry-run --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli doctor --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli doctor --live-judge --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli self-test --json
 ```
 
 ## 安装
@@ -88,14 +88,14 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli self-test --json
 先预览变更：
 
 ```bash
-cd /path/to/codex-click-chooser-hooks
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --dry-run --json
+cd /path/to/codex-next-step-hooks
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --dry-run --json
 ```
 
 然后正式应用：
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --json
 ```
 
 `install` 会做这些事：
@@ -110,19 +110,19 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --json
 静态检查：
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli doctor --json
 ```
 
 live judge probe：
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --live-judge --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli doctor --live-judge --json
 ```
 
 deterministic regression suite：
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli self-test --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli self-test --json
 ```
 
 ## 卸载
@@ -130,13 +130,13 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli self-test --json
 先预览移除结果：
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli uninstall --dry-run --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli uninstall --dry-run --json
 ```
 
 移除受管理的 handler：
 
 ```bash
-PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli uninstall --json
+PYTHONPATH=src python3 -m codex_next_step_hooks.cli uninstall --json
 ```
 
 `uninstall` 只会移除由这个包管理的条目，不会影响无关的 hook 配置。
@@ -162,8 +162,8 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli uninstall --json
 
 对应的 command 指向：
 
-- `src/codex_click_chooser_hooks/hooks/session_start_request_user_input_policy.py`
-- `src/codex_click_chooser_hooks/hooks/stop_require_request_user_input.py`
+- `src/codex_next_step_hooks/hooks/session_start_request_user_input_policy.py`
+- `src/codex_next_step_hooks/hooks/stop_require_request_user_input.py`
 
 ## 后续可改进方向
 

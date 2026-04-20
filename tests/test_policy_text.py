@@ -5,8 +5,8 @@ import unittest
 from contextlib import redirect_stdout
 from io import StringIO
 
-from codex_click_chooser_hooks.hooks import session_start_request_user_input_policy
-from codex_click_chooser_hooks.hooks.stop_require_request_user_input import (
+from codex_next_step_hooks.hooks import session_start_request_user_input_policy
+from codex_next_step_hooks.hooks.stop_require_request_user_input import (
     JUDGE_MODEL,
     JUDGE_REASONING_EFFORT,
     SYSTEM_PROMPT,

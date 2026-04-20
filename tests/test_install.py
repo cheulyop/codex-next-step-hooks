@@ -6,12 +6,36 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from codex_click_chooser_hooks.install import run_install
-from codex_click_chooser_hooks.merge import load_managed_hooks
-from codex_click_chooser_hooks.merge import merge_hooks_config
+from codex_next_step_hooks.install import run_install
+from codex_next_step_hooks.merge import load_managed_hooks
+from codex_next_step_hooks.merge import merge_hooks_config
+from codex_next_step_hooks.merge import uninstall_managed_hooks
 
 
 class InstallTests(unittest.TestCase):
+    def test_uninstall_removes_old_managed_status_marker(self) -> None:
+        existing = {
+            "hooks": {
+                "Stop": [
+                    {
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": "/usr/bin/python3 /tmp/src/codex_click_chooser_hooks/hooks/stop_require_request_user_input.py",
+                                "statusMessage": "Checking next-step chooser (codex-click-chooser-hooks)",
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+
+        updated, changes = uninstall_managed_hooks(existing)
+
+        self.assertEqual(changes["removed_hooks"], 1)
+        self.assertEqual(changes["updated_events"], ["Stop"])
+        self.assertEqual(updated["hooks"], {})
+
     def test_merge_does_not_report_inserts_for_identical_managed_hooks(self) -> None:
         managed = load_managed_hooks(sys.executable)
 

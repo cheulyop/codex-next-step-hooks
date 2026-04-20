@@ -11,7 +11,10 @@ from .runtime_paths import package_root
 from .runtime_paths import templates_dir
 
 
-MANAGED_STATUS_MARKER = "codex-click-chooser-hooks"
+MANAGED_STATUS_MARKERS = (
+    "codex-next-step-hooks",
+    "codex-click-chooser-hooks",
+)
 MANAGED_SCRIPT_NAMES = (
     "session_start_request_user_input_policy.py",
     "stop_require_request_user_input.py",
@@ -76,7 +79,9 @@ def is_managed_hook(hook: dict[str, Any]) -> bool:
     if not isinstance(hook, dict):
         return False
     status_message = hook.get("statusMessage")
-    if isinstance(status_message, str) and MANAGED_STATUS_MARKER in status_message:
+    if isinstance(status_message, str) and any(
+        marker in status_message for marker in MANAGED_STATUS_MARKERS
+    ):
         return True
     command = hook.get("command")
     if not isinstance(command, str):

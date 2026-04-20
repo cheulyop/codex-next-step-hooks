@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{python}} {{repo_root}}/src/codex_next_step_hooks/hooks/session_start_request_user_input_policy.py",
+            "statusMessage": "Loading next-step policy (codex-next-step-hooks)"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{python}} {{repo_root}}/src/codex_next_step_hooks/hooks/stop_require_request_user_input.py",
+            "statusMessage": "Checking next-step decision (codex-next-step-hooks)"
+          }
+        ]
+      }
+    ]
+  }
+}

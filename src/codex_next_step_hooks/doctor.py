@@ -19,7 +19,7 @@ def package_root() -> Path:
 def run_live_judge_probe() -> dict[str, Any]:
     try:
         stop_hook = import_module(
-            "codex_click_chooser_hooks.hooks.stop_require_request_user_input"
+            "codex_next_step_hooks.hooks.stop_require_request_user_input"
         )
     except Exception as exc:
         return {
@@ -30,7 +30,7 @@ def run_live_judge_probe() -> dict[str, Any]:
     probe_message = (
         "That covers the explanation.\n\n"
         "If helpful, we can continue with one of two obvious next steps.\n"
-        "We can add a concrete example or refine the chooser decision rules."
+        "We can add a concrete example or refine the next-step decision rules."
     )
     try:
         judgment, failure_reason = stop_hook.judge_should_request(
@@ -112,32 +112,32 @@ def run_doctor(live_judge: bool = False) -> dict:
         },
         "stop_hook_script": {
             "status": "pass"
-            if (root / "src/codex_click_chooser_hooks/hooks/stop_require_request_user_input.py").exists()
+            if (root / "src/codex_next_step_hooks/hooks/stop_require_request_user_input.py").exists()
             else "fail"
         },
         "sessionstart_hook_script": {
             "status": "pass"
-            if (root / "src/codex_click_chooser_hooks/hooks/session_start_request_user_input_policy.py").exists()
+            if (root / "src/codex_next_step_hooks/hooks/session_start_request_user_input_policy.py").exists()
             else "fail"
         },
         "install_module": {
             "status": "pass"
-            if (root / "src/codex_click_chooser_hooks/install.py").exists()
+            if (root / "src/codex_next_step_hooks/install.py").exists()
             else "fail"
         },
         "uninstall_module": {
             "status": "pass"
-            if (root / "src/codex_click_chooser_hooks/uninstall.py").exists()
+            if (root / "src/codex_next_step_hooks/uninstall.py").exists()
             else "fail"
         },
         "merge_module": {
             "status": "pass"
-            if (root / "src/codex_click_chooser_hooks/merge.py").exists()
+            if (root / "src/codex_next_step_hooks/merge.py").exists()
             else "fail"
         },
         "hooks_template": {
             "status": "pass"
-            if (root / "src/codex_click_chooser_hooks/templates/hooks.json").exists()
+            if (root / "src/codex_next_step_hooks/templates/hooks.json").exists()
             else "fail"
         },
         "selftest_fixture": {
