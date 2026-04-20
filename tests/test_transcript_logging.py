@@ -114,7 +114,7 @@ class TranscriptLoggingTests(unittest.TestCase):
         hook_output, event = self.run_main_with_judgment(judgment)
 
         self.assertEqual(hook_output["decision"], "block")
-        self.assertIn("Generate the chooser header, exactly one chooser question", hook_output["reason"])
+        self.assertIn("Generate the header, exactly one follow-up question", hook_output["reason"])
         self.assertEqual(event["payload"]["decision"], "block")
         self.assertEqual(event["payload"]["status"], "mode_ask_user")
         self.assertEqual(event["payload"]["mode"], "ask_user")
@@ -353,8 +353,8 @@ class TranscriptLoggingTests(unittest.TestCase):
                 },
             ],
         )
-        self.assertEqual(len(context["recent_choosers"]), 1)
-        self.assertEqual(context["recent_choosers"][0]["answers"], ["README만"])
+        self.assertEqual(len(context["recent_questions"]), 1)
+        self.assertEqual(context["recent_questions"][0]["answers"], ["README만"])
         self.assertEqual(context["current_turn_requests"][0]["question"], "어떻게 진행할까요?")
 
     def test_main_logs_judge_unavailable_failure_reason(self) -> None:

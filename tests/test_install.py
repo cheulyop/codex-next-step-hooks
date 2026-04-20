@@ -13,7 +13,7 @@ from codex_next_step_hooks.merge import uninstall_managed_hooks
 
 
 class InstallTests(unittest.TestCase):
-    def test_uninstall_removes_old_managed_status_marker(self) -> None:
+    def test_uninstall_removes_managed_hook(self) -> None:
         existing = {
             "hooks": {
                 "Stop": [
@@ -21,8 +21,8 @@ class InstallTests(unittest.TestCase):
                         "hooks": [
                             {
                                 "type": "command",
-                                "command": "/usr/bin/python3 /tmp/src/codex_click_chooser_hooks/hooks/stop_require_request_user_input.py",
-                                "statusMessage": "Checking next-step chooser (codex-click-chooser-hooks)",
+                                "command": "/usr/bin/python3 /tmp/src/codex_next_step_hooks/hooks/stop_require_request_user_input.py",
+                                "statusMessage": "Checking next-step decision (codex-next-step-hooks)",
                             }
                         ]
                     }

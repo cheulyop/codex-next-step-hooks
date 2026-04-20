@@ -86,7 +86,7 @@ def run_selftest_case(case_path: Path | None = None) -> dict[str, Any]:
     reason_text = ""
     if actual_decision == "block":
         reason_text = hook.build_block_reason(
-            payload["_judgment"], payload.get("_recent_choosers", [])
+            payload["_judgment"], payload.get("_recent_questions", [])
         )
         for needle in expected.get("reason_contains", []):
             if needle not in reason_text:

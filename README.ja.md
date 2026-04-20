@@ -13,11 +13,11 @@
 このパッケージは 2 つの managed Codex hook をインストールします。
 
 - 起動時と resume 時に next-step policy を読み込む `SessionStart` hook
-- closeout を通常終了するか、同じターンで自動継続するか、短い follow-up chooser を出すか決める `Stop` hook
+- closeout を通常終了するか、同じターンで自動継続するか、短いフォローアップ質問を出すか決める `Stop` hook
 
 judge モデルは最近の会話コンテキストを見て `end` / `auto_continue` /
 `ask_user` モードを選びます。`ask_user` が必要な場合は、Codex が現在の
-セッション文脈に合わせて実際の chooser 質問と選択肢を生成します。
+セッション文脈に合わせて実際のフォローアップ質問と選択肢を生成します。
 
 これらの hook は `~/.codex/hooks.json` に additive にマージされ、
 `uninstall` はこのパッケージが管理する項目だけを削除します。

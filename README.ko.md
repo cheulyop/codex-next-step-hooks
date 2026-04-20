@@ -8,21 +8,16 @@
 정상 종료할지, 같은 턴에서 자동으로 이어갈지, 아니면 짧은 후속 질문을
 한 번 더 할지를 판단합니다.
 
-현재 기준 canonical 이름은 `codex-next-step-hooks`, canonical Python module
-path는 `codex_next_step_hooks`입니다. 이전 이름인
-`codex-click-chooser-hooks` / `codex_click_chooser_hooks`도 rename 전환
-기간 동안은 compatibility alias로 유지됩니다.
-
 ## 무엇을 하나요
 
 이 패키지는 Codex hook 두 개를 설치합니다.
 
 - 시작 또는 resume 시, 같은 턴에서 자연스럽게 이어갈지에 대한 기본 원칙을
   불러오는 `SessionStart` hook
-- 마무리 응답을 정상 종료할지, 같은 턴에서 자동으로 이어갈지, 짧은 후속 chooser를 보여줄지 결정하는 `Stop` hook
+- 마무리 응답을 정상 종료할지, 같은 턴에서 자동으로 이어갈지, 짧은 후속 질문을 던질지 결정하는 `Stop` hook
 
 judge 모델은 최근 대화 맥락을 보고 `end` / `auto_continue` / `ask_user`
-모드를 고릅니다. `ask_user`가 필요하면 Codex가 실제 chooser 질문과 옵션을
+모드를 고릅니다. `ask_user`가 필요하면 Codex가 실제 후속 질문과 옵션을
 현재 세션 맥락에 맞게 생성합니다.
 
 이 패키지가 추가하는 hook 항목들은 `~/.codex/hooks.json`에 additive
@@ -34,12 +29,12 @@ judge 모델은 최근 대화 맥락을 보고 `end` / `auto_continue` / `ask_us
    - clear next step이 하나이면 같은 턴에서 바로 이어서 진행
    - 실제로 선택이 필요할 때만 한 번 질문
 2. 턴이 끝나기 직전에 `Stop` hook이 실행됩니다.
-3. `Stop` hook은 최근 대화 흐름, 최근 chooser 내역, 막 끝나려는 assistant
+3. `Stop` hook은 최근 대화 흐름, 최근 후속 질문 내역, 막 끝나려는 assistant
    응답을 모아 judge 모델에 보냅니다.
 4. judge는 세 가지 structured mode 중 하나를 반환합니다.
    - `end`: assistant 응답을 정상 종료
    - `auto_continue`: 사용자에게 묻지 않고 같은 턴에서 계속 진행
-   - `ask_user`: 멈춘 뒤 Codex가 실제 후속 chooser를 제시
+   - `ask_user`: 멈춘 뒤 Codex가 실제 후속 질문을 제시
 5. 메인 Codex 세션은 그 결과를 실제로 수행합니다.
    - `end`: 턴이 그대로 종료됩니다
    - `auto_continue`: continue instruction을 받아 같은 턴에서 계속 움직입니다
@@ -48,7 +43,7 @@ judge 모델은 최근 대화 맥락을 보고 `end` / `auto_continue` / `ask_us
 6. 이후 transcript에는 `stop_hook_judgment` debug event가 추가되어,
    나중에 `observe`로 실제 판단을 다시 볼 수 있습니다.
 
-judge는 세 가지 결과 중 하나와 짧은 이유를 돌려줍니다. 실제 chooser 문항은
+judge는 세 가지 결과 중 하나와 짧은 이유를 돌려줍니다. 실제 후속 질문은
 judge가 아니라 메인 Codex 세션이 작성합니다.
 
 예를 들면 이렇게 동작합니다.
@@ -57,7 +52,7 @@ judge가 아니라 메인 Codex 세션이 작성합니다.
 - assistant가 `패치는 반영됐고 다음 단계는 self-test 실행입니다.`로 끝나면
   보통 같은 턴에서 계속 진행합니다
 - assistant가 `프롬프트를 다듬을지, observe를 먼저 볼지 정해야 합니다.`처럼
-  두 갈래를 열면 보통 chooser를 한 번 띄웁니다
+  두 갈래를 열면 보통 후속 질문을 한 번 띄웁니다
 
 ## Judge Endpoint
 
@@ -99,7 +94,7 @@ Stop hook은 raw transcript 전체를 그대로 보내지 않고, 현재 작업 
 judge가 주로 참고하는 것은 다음 네 가지입니다.
 
 - 최근 몇 턴의 대화 흐름
-- 최근 chooser 질문과 사용자의 선택
+- 최근 후속 질문과 사용자의 선택
 - 현재 턴에서 assistant가 이미 얼마나 진행했는지
 - 지금 막 끝나려는 마지막 assistant 응답
 
@@ -109,7 +104,7 @@ judge가 주로 참고하는 것은 다음 네 가지입니다.
 최근 흐름:
 - user: README 설명을 더 간단하게 정리해 주세요
 - assistant: README 수정과 검증을 마쳤습니다
-- recent chooser: "다음엔 무엇을 할까요?" -> "검증 후 커밋"
+- 최근 후속 질문: "다음엔 무엇을 할까요?" -> "검증 후 커밋"
 - final assistant message: "검증은 끝났습니다. 이제 커밋할 수 있습니다."
 ```
 
@@ -133,7 +128,7 @@ mode별 기대 동작:
 
 - `end`: `continue_instruction`은 보통 비어 있습니다
 - `auto_continue`: `continue_instruction`이 반드시 비어 있지 않아야 합니다
-- `ask_user`: 실제 chooser는 Codex가 생성하므로 `continue_instruction`은 비어 있을 수 있습니다
+- `ask_user`: 실제 후속 질문은 Codex가 생성하므로 `continue_instruction`은 비어 있을 수 있습니다
 
 예시:
 
@@ -167,7 +162,7 @@ UI 수준에서는 대체로 이렇게 느껴집니다.
 
 - 턴이 진짜 끝난 경우에는 그냥 정상 종료됩니다
 - 다음 행동이 하나로 명확하면 클릭을 요구하지 않고 그대로 계속 진행합니다
-- 실제로 선택이 필요할 때만 chooser를 띄우고, 선택 후에도 같은 턴에서 이어서 진행합니다
+- 실제로 선택이 필요할 때만 후속 질문을 띄우고, 선택 후에도 같은 턴에서 이어서 진행합니다
 
 좀 더 구체적인 예시:
 
@@ -190,7 +185,7 @@ UI 수준에서는 대체로 이렇게 느껴집니다.
 - 실제 분기 선택:
   - assistant ends with: `We can either inspect more mode_end cases or tighten the prompt wording.`
   - expected mode: `ask_user`
-  - 이후 Codex가 같은 턴에서 실제 chooser를 생성합니다
+  - 이후 Codex가 같은 턴에서 실제 후속 질문을 생성합니다
 
 ## Stop hook 분기 처리
 
@@ -200,7 +195,7 @@ judge가 응답을 반환한 뒤 stop hook은 그것을 두 종류의 block inst
 - `build_auto_continue_block_reason(...)`는 사용자에게 다시 묻지 말고,
   바로 continue instruction을 수행하라고 Codex에 지시합니다
 - `build_ask_user_block_reason(...)`는 `request_user_input`를 호출하고,
-  session context를 바탕으로 chooser를 생성하라고 지시합니다
+  session context를 바탕으로 후속 질문을 생성하라고 지시합니다
 - `end`는 별도 block reason 없이 턴을 그대로 닫습니다
 
 judge 뒤에는 safety layer도 하나 있습니다.
@@ -271,8 +266,6 @@ customize하기 쉽게 만드는 쪽을 의도합니다.
 - repo 핵심 경로를 빠르게 확인하는 `print-layout` CLI
 - 런타임 및 endpoint 구성을 설명하는 contract 문서
 - judge mode와 짧은 rationale을 기록하는 transcript debug event
-- rename 직후에도 이미 떠 있는 세션과 옛 import 경로가 바로 깨지지 않도록
-  `src/codex_click_chooser_hooks/` 아래에 남겨둔 얇은 compatibility shim
 
 ## 현재 기능
 
@@ -313,8 +306,6 @@ codex-next-step-hooks/
 │  │  │  └─ stop_require_request_user_input.py
 │  │  └─ templates/
 │  │     └─ hooks.json
-│  └─ codex_click_chooser_hooks/
-│     └─ ... rename 전환용 thin compatibility shim
 └─ tests/
    ├─ *.json
    └─ fixtures/
@@ -348,11 +339,6 @@ PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --dry-run --json
 PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --json
 ```
 
-예전 checkout이나 rename 이전 설치 흔적 때문에
-`src/codex_click_chooser_hooks/...` 관련 에러가 보이면 `install`을 한 번 더
-실행하세요. 새 설치는 `~/.codex/hooks.json`을
-`src/codex_next_step_hooks/...` 경로로 다시 써 줍니다.
-
 필요하면 Python 인터프리터나 Codex home을 직접 지정할 수 있습니다.
 
 ```bash
@@ -365,7 +351,6 @@ PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --python /path/to/py
 - 현재 repo root를 이 패키지가 추가하는 hook command에 반영합니다
 - 이 패키지가 추가하는 hook 항목을 `~/.codex/hooks.json`에 병합합니다
 - 파일이 바뀌면 쓰기 전에 backup을 만듭니다
-- rename 이전 패키지가 남긴 managed entry도 새 스크립트 경로 기준으로 다시 씁니다
 
 ## 검증
 
@@ -420,17 +405,6 @@ PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --all-cwds --date-fr
 PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --mode ask_user --limit 3 --json
 ```
 
-## Rename Compatibility
-
-- 새 설치와 문서는 `codex-next-step-hooks`, `codex_next_step_hooks`를 기준으로
-  설명합니다
-- legacy console script 이름 `codex-click-chooser-hooks`도 계속 같은 CLI를
-  가리키도록 남겨 두었습니다
-- 이미 떠 있는 오래된 세션이 여전히 예전 hook file path를 호출하더라도,
-  `src/codex_click_chooser_hooks/hooks/` 아래의 thin shim이 바로 죽지 않도록
-  막아 줍니다
-- `uninstall`은 old/new managed marker를 둘 다 인식합니다
-
 ## 제거
 
 먼저 제거 결과를 미리 봅니다.
@@ -452,7 +426,7 @@ PYTHONPATH=src python3 -m codex_next_step_hooks.cli uninstall --codex-home /path
 ```
 
 `uninstall`은 이 패키지가 추가한 항목만 제거하고, 관련 없는 hook 설정은
-그대로 둡니다. rename 전환 기간의 옛 항목도 함께 정리할 수 있습니다.
+그대로 둡니다.
 
 ## CLI 명령
 
@@ -466,10 +440,6 @@ PYTHONPATH=src python3 -m codex_next_step_hooks.cli uninstall --codex-home /path
   - repo 범위/전체 범위, archived 세션 포함, 날짜 필터를 지원
   - `--session-id`, `--mode`, `--limit`으로 더 좁게 볼 수 있습니다
 - `print-layout`: repo의 주요 경로를 JSON 또는 plain dict로 출력
-
-이 README의 CLI 예시는 모두 `codex_next_step_hooks` 기준으로 적었지만,
-호환성을 위해 legacy console script 이름 `codex-click-chooser-hooks`도 아직
-사용할 수 있습니다.
 
 ## 런타임 구성
 
@@ -486,10 +456,6 @@ PYTHONPATH=src python3 -m codex_next_step_hooks.cli uninstall --codex-home /path
 
 - `src/codex_next_step_hooks/hooks/session_start_request_user_input_policy.py`
 - `src/codex_next_step_hooks/hooks/stop_require_request_user_input.py`
-
-호환성을 위해 `src/codex_click_chooser_hooks/hooks/` 아래에도 thin wrapper가
-남아 있지만, 새 설치는 위 `codex_next_step_hooks` 경로를 기준으로 쓰는 것이
-정상입니다.
 
 ## 앞으로 개선할 점
 

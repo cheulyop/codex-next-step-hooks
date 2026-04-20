@@ -7,22 +7,17 @@ Translations may lag behind the English version.
 Codex hooks that help a turn end the right way: finish normally, continue
 automatically, or ask one clear follow-up question.
 
-The canonical package name is `codex-next-step-hooks`, and the canonical Python
-module path is `codex_next_step_hooks`. The older
-`codex-click-chooser-hooks` / `codex_click_chooser_hooks` name is still kept as
-a compatibility alias during the rename window.
-
 ## What It Does
 
 This package installs two Codex hooks:
 
 - a `SessionStart` hook that loads the basic "keep going vs ask once" policy
   when a Codex session starts or resumes
-- a `Stop` hook that decides whether a closeout should end normally, auto-continue in the same turn, or show a short follow-up chooser
+- a `Stop` hook that decides whether a closeout should end normally, auto-continue in the same turn, or ask one short follow-up question
 
 The judge model picks the `end` / `auto_continue` / `ask_user` mode by looking
 at the recent conversation context. When `ask_user` is needed, Codex generates
-the actual chooser question and options from the live session context.
+the actual follow-up question and options from the live session context.
 
 The hook entries from this package are merged additively into
 `~/.codex/hooks.json`, and `uninstall` removes only the entries added by this
@@ -34,13 +29,13 @@ package.
    - if there is one clear next step, prefer same-turn follow-through
    - ask only when the user truly needs to choose
 2. `Stop` runs when a turn is about to end.
-3. The `Stop` hook bundles recent conversation flow, recent chooser history,
+3. The `Stop` hook bundles recent conversation flow, recent follow-up question history,
    and the assistant message that is about to end, then sends that summary to
    the judge model.
 4. The judge returns one of three structured modes:
    - `end`: let the assistant finish normally
    - `auto_continue`: keep going in the same turn without asking the user
-   - `ask_user`: stop and let Codex ask one real follow-up chooser
+   - `ask_user`: stop and let Codex ask one real follow-up question
 5. The main Codex session carries out that result:
    - `end`: the turn closes normally
    - `auto_continue`: Codex receives a continue instruction and keeps moving
@@ -50,7 +45,7 @@ package.
    you can inspect what happened later with `observe`.
 
 The judge only returns the mode, a short rationale, and an optional
-`continue_instruction`. It does not generate the chooser itself.
+`continue_instruction`. It does not generate the follow-up question itself.
 
 For example:
 
@@ -59,7 +54,7 @@ For example:
 - if the assistant ends with `The patch is in, and the next step is to run
   self-test.`, Codex usually keeps going in the same turn
 - if the assistant ends with `We can either tighten the prompt or inspect more
-  real transcripts.`, Codex usually shows one chooser
+  real transcripts.`, Codex usually asks one follow-up question
 
 ## Judge Endpoint
 
@@ -101,7 +96,7 @@ summary of the current lane of work.
 The judge mainly looks at:
 
 - the last few turns of conversation
-- the most recent chooser questions and what the user selected
+- the most recent follow-up questions and what the user selected
 - how much work the assistant already did in the current turn
 - the final assistant message that is about to end
 
@@ -111,7 +106,7 @@ For example, the summary might effectively say:
 Recent flow:
 - user: Please simplify the README explanation
 - assistant: I updated the README and finished verification
-- recent chooser: "What should we do next?" -> "Verify, then commit"
+- recent follow-up question: "What should we do next?" -> "Verify, then commit"
 - final assistant message: "Verification is done, so the next step is to commit."
 ```
 
@@ -136,7 +131,7 @@ Expected behavior by mode:
 - `end`: `continue_instruction` is usually empty
 - `auto_continue`: `continue_instruction` must be non-empty
 - `ask_user`: `continue_instruction` may be empty because Codex will generate
-  the chooser itself
+  the follow-up question itself
 
 Example outputs:
 
@@ -170,7 +165,7 @@ At the UI level, the behavior feels like this:
 
 - if the turn is truly done, Codex just ends normally
 - if one next action is obvious, Codex keeps going without making you click
-- if a real decision is needed, Codex shows one chooser and continues in the
+- if a real decision is needed, Codex asks one follow-up question and continues in the
   same turn after you select it
 
 Typical examples:
@@ -194,7 +189,7 @@ Typical examples:
 - Real branch choice:
   - assistant ends with: `We can either inspect more mode_end cases or tighten the prompt wording.`
   - expected mode: `ask_user`
-  - Codex then writes the actual chooser in the same turn
+  - Codex then writes the actual follow-up question in the same turn
 
 ## Stop-Hook Branch Handling
 
@@ -204,7 +199,7 @@ instructions or lets the turn end:
 - `build_auto_continue_block_reason(...)` tells Codex not to ask another
   question and to continue immediately with the supplied instruction
 - `build_ask_user_block_reason(...)` tells Codex to call
-  `request_user_input` and generate the chooser from session context
+  `request_user_input` and generate the follow-up question from session context
 - `end` does not produce a follow-up block reason; the turn simply closes
 
 There is also one safety layer after the judge:
@@ -276,8 +271,6 @@ heuristics, then rerun `self-test`, `doctor`, and `observe`.
 - a `print-layout` CLI for a quick repository layout snapshot
 - a runtime contract for endpoint and environment configuration
 - transcript debug events that record the judge mode and short rationale
-- a thin legacy shim under `src/codex_click_chooser_hooks/` so already-running
-  sessions and older import paths do not break immediately after the rename
 
 ## Current Capabilities
 
@@ -315,8 +308,6 @@ codex-next-step-hooks/
 │  │  │  └─ stop_require_request_user_input.py
 │  │  └─ templates/
 │  │     └─ hooks.json
-│  └─ codex_click_chooser_hooks/
-│     └─ ... thin compatibility shim during the rename
 └─ tests/
    ├─ *.json
    └─ fixtures/
@@ -350,10 +341,6 @@ Apply the install:
 PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --json
 ```
 
-If you renamed from an older checkout or still see an error that mentions
-`src/codex_click_chooser_hooks/...`, rerun `install` once. New installs rewrite
-`~/.codex/hooks.json` to point at `src/codex_next_step_hooks/...`.
-
 Override the Python interpreter or Codex home if needed:
 
 ```bash
@@ -366,8 +353,6 @@ What `install` does:
 - injects the current repo root into the hook commands added by this package
 - merges the hook entries from this package into `~/.codex/hooks.json`
 - creates a backup before writing if the file changes
-- rewrites older managed entries from the pre-rename package to the new script
-  paths
 
 ## Verify
 
@@ -422,17 +407,6 @@ Filter to one mode or change the example count:
 PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --mode ask_user --limit 3 --json
 ```
 
-## Rename Compatibility
-
-- new installs and docs use `codex-next-step-hooks` and
-  `codex_next_step_hooks`
-- the legacy console-script name `codex-click-chooser-hooks` still points at
-  the same CLI entrypoint
-- the repo also ships thin files under `src/codex_click_chooser_hooks/hooks/`
-  so older live sessions that still invoke the old hook paths do not fail with
-  `No such file or directory`
-- `uninstall` recognizes both the old and new managed hook markers
-
 ## Uninstall
 
 Preview the removal:
@@ -454,8 +428,7 @@ PYTHONPATH=src python3 -m codex_next_step_hooks.cli uninstall --codex-home /path
 ```
 
 `uninstall` removes only the hook entries added by this package and
-leaves unrelated hook configuration intact, including during the rename window
-from the older package name.
+leaves unrelated hook configuration intact.
 
 ## CLI Commands
 
@@ -469,10 +442,6 @@ from the older package name.
   - supports repo-scoped or all-cwd scans, archived session inclusion, and date filtering
   - supports `--session-id`, `--mode`, and `--limit` for narrower inspection
 - `print-layout`: print the repo's key paths as JSON or a plain dict
-
-The canonical CLI examples in this README use `codex_next_step_hooks`, but the
-legacy console-script name `codex-click-chooser-hooks` is still available for
-compatibility.
 
 ## Runtime Configuration
 
@@ -489,10 +458,6 @@ The commands point at:
 
 - `src/codex_next_step_hooks/hooks/session_start_request_user_input_policy.py`
 - `src/codex_next_step_hooks/hooks/stop_require_request_user_input.py`
-
-For compatibility, thin wrapper files also exist under
-`src/codex_click_chooser_hooks/hooks/`, but new installs should point at the
-`codex_next_step_hooks` paths above.
 
 ## Future Improvements
 

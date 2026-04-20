@@ -11,10 +11,7 @@ from .runtime_paths import package_root
 from .runtime_paths import templates_dir
 
 
-MANAGED_STATUS_MARKERS = (
-    "codex-next-step-hooks",
-    "codex-click-chooser-hooks",
-)
+MANAGED_STATUS_MARKERS = ("codex-next-step-hooks",)
 MANAGED_SCRIPT_NAMES = (
     "session_start_request_user_input_policy.py",
     "stop_require_request_user_input.py",

@@ -18,7 +18,7 @@
       "The next step is to inspect a few mode_end rationales before weakening the end wording."
     ],
     "reason_contains": [
-      "Do not ask the user another question or show a chooser here.",
+      "Do not ask the user another follow-up question here.",
       "Continue immediately with this instruction:",
       "Continue with the next step the assistant just surfaced: inspect a few mode_end rationales before weakening the end wording."
     ]

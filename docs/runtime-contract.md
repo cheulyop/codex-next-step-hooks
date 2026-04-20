@@ -12,10 +12,10 @@ decides whether to:
 
 - end normally
 - auto-continue in the same turn without asking the user
-- show a `request_user_input` chooser
+- ask one `request_user_input` follow-up question
 
 The judge decides the tri-state outcome. When it returns `mode="ask_user"`,
-Codex generates the actual chooser question and options from the live session
+Codex generates the actual follow-up question and options from the live session
 context in the same turn.
 
 Defaults:

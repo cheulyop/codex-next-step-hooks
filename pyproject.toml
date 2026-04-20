@@ -12,7 +12,6 @@ dependencies = []
 
 [project.scripts]
 codex-next-step-hooks = "codex_next_step_hooks.cli:main"
-codex-click-chooser-hooks = "codex_next_step_hooks.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

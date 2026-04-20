@@ -4,7 +4,7 @@
   "payload": {
     "turn_id": "turn-101",
     "stop_hook_active": true,
-    "last_assistant_message": "A short next-step chooser usually works well after an explanatory response.\n\nIn many cases, options like do it now, show an example, or stop here are already enough."
+    "last_assistant_message": "A short next-step follow-up question usually works well after an explanatory response.\n\nIn many cases, options like do it now, show an example, or stop here are already enough."
   },
   "judge_result": {
     "mode": "ask_user",
@@ -14,14 +14,14 @@
   "expected": {
     "decision": "block",
     "context_contains": [
-      "<recent_chooser_summary>",
+      "<recent_question_summary>",
       "Refine decision rules first",
-      "A short next-step chooser usually works well after an explanatory response."
+      "A short next-step follow-up question usually works well after an explanatory response."
     ],
     "reason_contains": [
-      "Generate the chooser header, exactly one chooser question",
+      "Generate the header, exactly one follow-up question",
       "the natural single-select options yourself",
-      "Do not ask the same or substantially similar chooser again",
+      "Do not ask the same or substantially similar follow-up question again",
       "immediately continue in the same turn",
       "Do not stop right after the `request_user_input` tool output"
     ]

@@ -4,7 +4,7 @@
   "payload": {
     "turn_id": "turn-201",
     "stop_hook_active": true,
-    "last_assistant_message": "The chooser logic should probably move to a tri-state decision.\n\nThe obvious next step is to update the schema and split the stop-hook branch handling."
+    "last_assistant_message": "The follow-up question logic should probably move to a tri-state decision.\n\nThe obvious next step is to update the schema and split the stop-hook branch handling."
   },
   "judge_result": {
     "mode": "auto_continue",
@@ -14,12 +14,12 @@
   "expected": {
     "decision": "block",
     "context_contains": [
-      "<recent_chooser_summary>",
+      "<recent_question_summary>",
       "Implement the tri-state flow",
       "The obvious next step is to update the schema and split the stop-hook branch handling."
     ],
     "reason_contains": [
-      "Do not ask the user another question or show a chooser here.",
+      "Do not ask the user another follow-up question here.",
       "Continue immediately with this instruction:",
       "mode=end|auto_continue|ask_user"
     ]

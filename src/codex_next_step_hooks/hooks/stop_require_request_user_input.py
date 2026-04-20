@@ -29,7 +29,7 @@ STOP_SELECTION_TERMS = (
     "괜찮",
 )
 RECENT_TURNS_LIMIT = 6
-RECENT_CHOOSERS_LIMIT = 6
+RECENT_QUESTIONS_LIMIT = 6
 CURRENT_TURN_MESSAGES_LIMIT = 3
 CURRENT_TURN_TIMELINE_LIMIT = 12
 MAX_CONTEXT_TEXT_CHARS = 240
@@ -63,7 +63,7 @@ Decide among exactly three modes:
   the same turn.
 
 Your main goal is useful progress with minimal friction. Do NOT ask the user
-just because a clickable chooser would be convenient.
+just because an extra follow-up question would be convenient.
 
 Prefer `mode="auto_continue"` when there is one clearly dominant next action
 that is already implied by the user's direction and does not depend on an
@@ -129,14 +129,14 @@ intent has already been substantially consumed and the next move is now a real
 choice, prefer `mode="ask_user"`. If the lane is genuinely complete, prefer
 `mode="end"`.
 
-If the same or substantially similar chooser was already shown recently and the
+If the same or substantially similar follow-up question was already shown recently and the
 conversation did not materially advance to a new state, prefer
-`mode="end"` or `mode="auto_continue"` instead of repeating the chooser. Avoid
+`mode="end"` or `mode="auto_continue"` instead of repeating that question. Avoid
 re-asking it within the same continued turn after the user already answered it.
 
-If the user answered a chooser with a free-form instruction, complaint, or
+If the user answered a follow-up question with a free-form instruction, complaint, or
 course correction, treat that as real intent to act on rather than as a reason
-to ask the same chooser again.
+to ask the same question again.
 
 If the user already selected a high-level lane recently, do not offer that same
 lane again. Move one level deeper and propose the next concrete actions within
@@ -144,8 +144,8 @@ that lane if `mode="ask_user"` is still necessary. Otherwise prefer
 `mode="auto_continue"` and keep moving.
 
 When using `mode="ask_user"`, you are only deciding that user input is needed.
-Do not try to author the chooser itself. Codex will generate the actual
-question and options from the recent session context.
+Do not try to author the follow-up question itself. Codex will generate the
+actual question and options from the recent session context.
 
 When using `mode="auto_continue"`, provide a concise `continue_instruction`
 that tells Codex what to do next in the same turn. Do not ask the user in that
@@ -287,7 +287,7 @@ def request_entries_from_turn(turn: Dict[str, Any]) -> List[Dict[str, Any]]:
             continue
         kind = entry.get("kind")
         if kind == "request_user_input":
-            chooser = {
+            question_request = {
                 "call_id": entry.get("call_id"),
                 "turn_id": entry.get("turn_id"),
                 "header": entry.get("header"),
@@ -295,10 +295,10 @@ def request_entries_from_turn(turn: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "options": normalize_options(entry.get("options")),
                 "answers": [],
             }
-            collected.append(chooser)
-            call_id = chooser.get("call_id")
+            collected.append(question_request)
+            call_id = question_request.get("call_id")
             if isinstance(call_id, str):
-                by_call_id[call_id] = chooser
+                by_call_id[call_id] = question_request
             continue
         if kind != "request_user_input_output":
             continue
@@ -455,7 +455,7 @@ def read_recent_session_context(
     if not path.exists():
         return {
             "recent_turns": [],
-            "recent_choosers": [],
+            "recent_questions": [],
             "current_turn_requests": [],
             "current_turn_context": {},
         }
@@ -565,17 +565,17 @@ def read_recent_session_context(
     if target_index == -1:
         return {
             "recent_turns": [],
-            "recent_choosers": [],
+            "recent_questions": [],
             "current_turn_requests": [],
             "current_turn_context": {},
         }
 
     recent_turns = turns[max(0, target_index - RECENT_TURNS_LIMIT + 1) : target_index + 1]
-    recent_choosers: List[Dict[str, Any]] = []
+    recent_questions: List[Dict[str, Any]] = []
     for turn in recent_turns:
         for request in request_entries_from_turn(turn):
-            recent_choosers.append(request)
-    recent_choosers = recent_choosers[-RECENT_CHOOSERS_LIMIT:]
+            recent_questions.append(request)
+    recent_questions = recent_questions[-RECENT_QUESTIONS_LIMIT:]
 
     current_turn_requests: List[Dict[str, Any]] = []
     current_turn_context: Dict[str, Any] = {}
@@ -586,7 +586,7 @@ def read_recent_session_context(
 
     return {
         "recent_turns": recent_turns,
-        "recent_choosers": recent_choosers,
+        "recent_questions": recent_questions,
         "current_turn_requests": current_turn_requests,
         "current_turn_context": current_turn_context,
     }
@@ -642,10 +642,10 @@ def extract_request_user_input_answers(output: str) -> List[str]:
     return extract_request_user_input_answers_from_value(payload.get("answers"))
 
 
-def chooser_option_labels(chooser: Dict[str, Any]) -> List[str]:
+def question_option_labels(question_request: Dict[str, Any]) -> List[str]:
     return [
         compact_render_text(option.get("label"), 80)
-        for option in normalize_options(chooser.get("options"))
+        for option in normalize_options(question_request.get("options"))
         if compact_render_text(option.get("label"), 80)
     ]
 
@@ -666,7 +666,7 @@ def latest_answer_is_explicit_stop(history: List[Dict[str, Any]]) -> bool:
 def judge_should_request(
     last_assistant_message: str,
     recent_turns: List[Dict[str, Any]],
-    recent_choosers: List[Dict[str, Any]],
+    recent_questions: List[Dict[str, Any]],
     current_turn_context: Dict[str, Any],
 ) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
     context_parts = ["Recent session context follows."]
@@ -715,23 +715,23 @@ def judge_should_request(
             for item in timeline_since_last_user:
                 context_parts.append(f"- {item['role']}: {item['text']}")
             context_parts.append("</current_turn_timeline_since_last_user>")
-    if recent_choosers:
-        context_parts.extend(["", "<recent_chooser_summary>"])
-        for chooser in recent_choosers[-3:]:
-            question = compact_render_text(chooser.get("question"), 200)
+    if recent_questions:
+        context_parts.extend(["", "<recent_question_summary>"])
+        for question_request in recent_questions[-3:]:
+            question = compact_render_text(question_request.get("question"), 200)
             if question:
                 context_parts.append(f"- question: {question}")
-            option_labels = chooser_option_labels(chooser)
+            option_labels = question_option_labels(question_request)
             if option_labels:
                 context_parts.append(f"  options: {', '.join(option_labels)}")
             answers = [
                 compact_render_text(answer, 120)
-                for answer in chooser.get("answers", [])
+                for answer in question_request.get("answers", [])
                 if compact_render_text(answer, 120)
             ]
             if answers:
                 context_parts.append(f"  user_answer: {' | '.join(answers)}")
-        context_parts.append("</recent_chooser_summary>")
+        context_parts.append("</recent_question_summary>")
     context_parts.extend(
         [
             "",
@@ -740,8 +740,8 @@ def judge_should_request(
             "</assistant_final_message>",
             "",
             "Decide whether the assistant should end, auto-continue in the same "
-            "turn without asking the user, or ask the user a short "
-            "`request_user_input` chooser.",
+            "turn without asking the user, or ask the user one "
+            "`request_user_input` follow-up question.",
         ]
     )
 
@@ -1047,20 +1047,20 @@ def append_stop_hook_debug_event(payload: Dict[str, Any]) -> None:
         return
 
 
-def render_recent_chooser_history(recent_choosers: List[Dict[str, Any]]) -> str:
-    if not recent_choosers:
+def render_recent_question_history(recent_questions: List[Dict[str, Any]]) -> str:
+    if not recent_questions:
         return ""
-    lines = ["Recent chooser history:"]
-    for chooser in recent_choosers[-3:]:
-        question = compact_render_text(chooser.get("question"), 200)
+    lines = ["Recent follow-up question history:"]
+    for question_request in recent_questions[-3:]:
+        question = compact_render_text(question_request.get("question"), 200)
         if question:
             lines.append(f"- Question: {question}")
-        option_labels = chooser_option_labels(chooser)
+        option_labels = question_option_labels(question_request)
         if option_labels:
             lines.append(f"  Options: {', '.join(option_labels)}")
         answers = [
             compact_render_text(answer, 120)
-            for answer in chooser.get("answers", [])
+            for answer in question_request.get("answers", [])
             if compact_render_text(answer, 120)
         ]
         if answers:
@@ -1069,19 +1069,19 @@ def render_recent_chooser_history(recent_choosers: List[Dict[str, Any]]) -> str:
 
 
 def build_ask_user_block_reason(
-    judgment: Dict[str, Any], recent_choosers: List[Dict[str, Any]]
+    judgment: Dict[str, Any], recent_questions: List[Dict[str, Any]]
 ) -> str:
     del judgment
-    recent_history_block = render_recent_chooser_history(recent_choosers)
+    recent_history_block = render_recent_question_history(recent_questions)
     anti_repeat_instruction = (
-        "Do not ask the same or substantially similar chooser again if the recent "
+        "Do not ask the same or substantially similar follow-up question again if the recent "
         "history already offered it. Treat free-form answers as new user intent to "
-        "act on, not as a cue to re-ask the same chooser."
+        "act on, not as a cue to re-ask the same question."
     )
     parts = [
         "Use the `request_user_input` tool now. Do not send another prose or bullet-list "
         "answer.",
-        "Generate the chooser header, exactly one chooser question, and the natural "
+        "Generate the header, exactly one follow-up question, and the natural "
         "single-select options yourself from the recent session context and the "
         "assistant message that just ended, then wait for the user's selection.",
     ]
@@ -1092,8 +1092,8 @@ def build_ask_user_block_reason(
             "",
             anti_repeat_instruction,
             "",
-            "The chooser should feel like a natural continuation of the just-finished "
-            "answer, not a reset-style menu. Use options that materially move the work "
+            "The follow-up question should feel like a natural continuation of the "
+            "just-finished answer, not a reset-style menu. Use options that materially move the work "
             "forward, and combine actions when that is the most natural single choice.",
             "",
             "After the user selects an option, immediately continue in the same turn by "
@@ -1108,12 +1108,12 @@ def build_ask_user_block_reason(
 
 
 def build_auto_continue_block_reason(
-    judgment: Dict[str, Any], recent_choosers: List[Dict[str, Any]]
+    judgment: Dict[str, Any], recent_questions: List[Dict[str, Any]]
 ) -> str:
     instruction = normalize_continue_instruction(judgment)
-    recent_history_block = render_recent_chooser_history(recent_choosers)
+    recent_history_block = render_recent_question_history(recent_questions)
     parts = [
-        "Do not ask the user another question or show a chooser here.",
+        "Do not ask the user another follow-up question here.",
         "The next step is clear enough to continue in the same turn without "
         "waiting for user input.",
         "",
@@ -1125,7 +1125,7 @@ def build_auto_continue_block_reason(
     parts.extend(
         [
             "",
-            "Treat the user's recent direction and chooser answers as already "
+            "Treat the user's recent direction and recent answers as already "
             "settled intent. Do not re-ask the same branching question unless "
             "a genuinely new hidden risk or materially different outcome appears.",
             "",
@@ -1140,12 +1140,12 @@ def build_auto_continue_block_reason(
 
 
 def build_block_reason(
-    judgment: Dict[str, Any], recent_choosers: List[Dict[str, Any]]
+    judgment: Dict[str, Any], recent_questions: List[Dict[str, Any]]
 ) -> str:
     mode = normalize_mode(judgment.get("mode"))
     if mode == "auto_continue":
-        return build_auto_continue_block_reason(judgment, recent_choosers)
-    return build_ask_user_block_reason(judgment, recent_choosers)
+        return build_auto_continue_block_reason(judgment, recent_questions)
+    return build_ask_user_block_reason(judgment, recent_questions)
 
 
 def should_continue(payload: Dict[str, Any]) -> bool:
@@ -1160,13 +1160,13 @@ def should_continue(payload: Dict[str, Any]) -> bool:
     transcript_path = payload.get("transcript_path")
     turn_id = payload.get("turn_id")
     recent_turns: List[Dict[str, Any]] = []
-    recent_choosers: List[Dict[str, Any]] = []
+    recent_questions: List[Dict[str, Any]] = []
     current_turn_requests: List[Dict[str, Any]] = []
     current_turn_context: Dict[str, Any] = {}
     if isinstance(transcript_path, str) and isinstance(turn_id, str):
         context = read_recent_session_context(transcript_path, turn_id)
         recent_turns = context.get("recent_turns", [])
-        recent_choosers = context.get("recent_choosers", [])
+        recent_questions = context.get("recent_questions", [])
         current_turn_requests = context.get("current_turn_requests", [])
         current_turn_context = context.get("current_turn_context", {})
     if current_turn_context:
@@ -1181,7 +1181,7 @@ def should_continue(payload: Dict[str, Any]) -> bool:
     raw_judgment, judge_failure_reason = judge_should_request(
         message,
         recent_turns,
-        recent_choosers,
+        recent_questions,
         current_turn_context,
     )
     if raw_judgment is None:
@@ -1225,7 +1225,7 @@ def should_continue(payload: Dict[str, Any]) -> bool:
         )
         return True
     payload["_judgment"] = judgment
-    payload["_recent_choosers"] = recent_choosers
+    payload["_recent_questions"] = recent_questions
     payload["_stop_hook_debug"] = build_stop_hook_debug_payload(
         payload,
         decision="block",
@@ -1258,7 +1258,7 @@ def main() -> int:
             {
                 "decision": "block",
                 "reason": build_block_reason(
-                    payload["_judgment"], payload.get("_recent_choosers", [])
+                    payload["_judgment"], payload.get("_recent_questions", [])
                 ),
             }
         )

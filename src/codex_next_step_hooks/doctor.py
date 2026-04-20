@@ -94,7 +94,7 @@ def run_live_judge_probe() -> dict[str, Any]:
             judgment
         )
     if mode == "ask_user":
-        result["chooser_generation"] = "codex_session"
+        result["ask_user_generation"] = "codex_session"
     if mode == "end":
         result["note"] = (
             "judge endpoint is reachable, but the sample explanatory closeout did "

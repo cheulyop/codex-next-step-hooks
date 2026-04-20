@@ -18,9 +18,9 @@
       "Next we can either inspect a few mode_end rationales or weaken the end wording."
     ],
     "reason_contains": [
-      "Generate the chooser header, exactly one chooser question",
+      "Generate the header, exactly one follow-up question",
       "the natural single-select options yourself",
-      "Do not ask the same or substantially similar chooser again"
+      "Do not ask the same or substantially similar follow-up question again"
     ]
   }
 }
