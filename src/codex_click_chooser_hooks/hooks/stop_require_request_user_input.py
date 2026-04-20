@@ -382,7 +382,6 @@ def read_recent_session_context(
     path = Path(transcript_path)
     if not path.exists():
         return {
-            "last_user_message": None,
             "recent_turns": [],
             "recent_choosers": [],
             "current_turn_requests": [],
@@ -486,7 +485,6 @@ def read_recent_session_context(
             break
     if target_index == -1:
         return {
-            "last_user_message": None,
             "recent_turns": [],
             "recent_choosers": [],
             "current_turn_requests": [],
@@ -500,19 +498,14 @@ def read_recent_session_context(
             recent_choosers.append(request)
     recent_choosers = recent_choosers[-RECENT_CHOOSERS_LIMIT:]
 
-    last_user_message: Optional[str] = None
     current_turn_requests: List[Dict[str, Any]] = []
     current_turn_context: Dict[str, Any] = {}
     if recent_turns:
         current_turn_summary = recent_turns[-1]
-        user_messages = current_turn_summary.get("user_messages", [])
-        if user_messages:
-            last_user_message = user_messages[-1]
         current_turn_requests = list(current_turn_summary.get("requests", []))
         current_turn_context = summarize_current_turn(current_turn_summary)
 
     return {
-        "last_user_message": last_user_message,
         "recent_turns": recent_turns,
         "recent_choosers": recent_choosers,
         "current_turn_requests": current_turn_requests,
@@ -581,7 +574,6 @@ def latest_answer_is_explicit_stop(history: List[Dict[str, Any]]) -> bool:
 
 def judge_should_request(
     last_assistant_message: str,
-    last_user_message: Optional[str],
     recent_turns: List[Dict[str, Any]],
     recent_choosers: List[Dict[str, Any]],
     current_turn_context: Dict[str, Any],
@@ -601,36 +593,8 @@ def judge_should_request(
                         "</last_user_message>",
                     ]
                 )
-            requests = turn.get("requests", [])
-            if requests:
-                context_parts.append("<request_user_input_history>")
-                for request in requests[-2:]:
-                    question = compact_render_text(request.get("question"), 200)
-                    if question:
-                        context_parts.append(f"- question: {question}")
-                    option_labels = chooser_option_labels(request)
-                    if option_labels:
-                        context_parts.append(f"  options: {', '.join(option_labels)}")
-                    answers = [
-                        compact_render_text(answer, 120)
-                        for answer in request.get("answers", [])
-                        if compact_render_text(answer, 120)
-                    ]
-                    if answers:
-                        context_parts.append(f"  user_answer: {' | '.join(answers)}")
-                context_parts.append("</request_user_input_history>")
             context_parts.append("</turn>")
         context_parts.append("</recent_session_context>")
-    if isinstance(last_user_message, str) and last_user_message.strip():
-        rendered_last_user_message = compact_render_text(last_user_message, 240)
-        context_parts.extend(
-            [
-                "",
-                "<last_user_message>",
-                rendered_last_user_message,
-                "</last_user_message>",
-            ]
-        )
     if current_turn_context:
         context_parts.extend(["", "<current_turn_state>"])
         context_parts.append(
@@ -1104,14 +1068,12 @@ def should_continue(payload: Dict[str, Any]) -> bool:
         return True
     transcript_path = payload.get("transcript_path")
     turn_id = payload.get("turn_id")
-    last_user_message = None
     recent_turns: List[Dict[str, Any]] = []
     recent_choosers: List[Dict[str, Any]] = []
     current_turn_requests: List[Dict[str, Any]] = []
     current_turn_context: Dict[str, Any] = {}
     if isinstance(transcript_path, str) and isinstance(turn_id, str):
         context = read_recent_session_context(transcript_path, turn_id)
-        last_user_message = context.get("last_user_message")
         recent_turns = context.get("recent_turns", [])
         recent_choosers = context.get("recent_choosers", [])
         current_turn_requests = context.get("current_turn_requests", [])
@@ -1127,7 +1089,6 @@ def should_continue(payload: Dict[str, Any]) -> bool:
         return True
     raw_judgment, judge_failure_reason = judge_should_request(
         message,
-        last_user_message,
         recent_turns,
         recent_choosers,
         current_turn_context,

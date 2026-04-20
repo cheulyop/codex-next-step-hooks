@@ -35,7 +35,6 @@ def run_live_judge_probe() -> dict[str, Any]:
     try:
         judgment, failure_reason = stop_hook.judge_should_request(
             probe_message,
-            None,
             [],
             [],
             {},

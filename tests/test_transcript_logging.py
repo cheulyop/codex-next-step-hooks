@@ -296,7 +296,6 @@ class TranscriptLoggingTests(unittest.TestCase):
         try:
             judgment, failure_reason = stop_hook.judge_should_request(
                 "The config flag is still missing in the current runtime path.",
-                "Go ahead and keep moving.",
                 [],
                 [],
                 current_turn_context,
@@ -307,6 +306,8 @@ class TranscriptLoggingTests(unittest.TestCase):
         self.assertIsNone(failure_reason)
         self.assertEqual(judgment["mode"], "end")
         prompt_text = captured_prompt["text"]
+        self.assertNotIn("<last_user_message>", prompt_text)
+        self.assertNotIn("<request_user_input_history>", prompt_text)
         self.assertIn("<current_turn_timeline_since_last_user>", prompt_text)
         self.assertNotIn("<current_turn_user_messages>", prompt_text)
         self.assertNotIn("<current_turn_assistant_history_before_final>", prompt_text)
