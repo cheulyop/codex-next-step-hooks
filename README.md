@@ -7,6 +7,11 @@ Translations may lag behind the English version.
 Codex hooks that help a turn end the right way: finish normally, continue
 automatically, or ask one clear follow-up question.
 
+The canonical package name is `codex-next-step-hooks`, and the canonical Python
+module path is `codex_next_step_hooks`. The older
+`codex-click-chooser-hooks` / `codex_click_chooser_hooks` name is still kept as
+a compatibility alias during the rename window.
+
 ## What It Does
 
 This package installs two Codex hooks:
@@ -271,6 +276,8 @@ heuristics, then rerun `self-test`, `doctor`, and `observe`.
 - a `print-layout` CLI for a quick repository layout snapshot
 - a runtime contract for endpoint and environment configuration
 - transcript debug events that record the judge mode and short rationale
+- a thin legacy shim under `src/codex_click_chooser_hooks/` so already-running
+  sessions and older import paths do not break immediately after the rename
 
 ## Current Capabilities
 
@@ -293,21 +300,23 @@ codex-next-step-hooks/
 ├─ docs/
 │  └─ runtime-contract.md
 ├─ src/
-│  └─ codex_next_step_hooks/
-│     ├─ __init__.py
-│     ├─ cli.py
-│     ├─ doctor.py
-│     ├─ install.py
-│     ├─ observe.py
-│     ├─ uninstall.py
-│     ├─ merge.py
-│     ├─ runtime_paths.py
-│     ├─ selftest.py
-│     ├─ hooks/
-│     │  ├─ session_start_request_user_input_policy.py
-│     │  └─ stop_require_request_user_input.py
-│     └─ templates/
-│        └─ hooks.json
+│  ├─ codex_next_step_hooks/
+│  │  ├─ __init__.py
+│  │  ├─ cli.py
+│  │  ├─ doctor.py
+│  │  ├─ install.py
+│  │  ├─ observe.py
+│  │  ├─ uninstall.py
+│  │  ├─ merge.py
+│  │  ├─ runtime_paths.py
+│  │  ├─ selftest.py
+│  │  ├─ hooks/
+│  │  │  ├─ session_start_request_user_input_policy.py
+│  │  │  └─ stop_require_request_user_input.py
+│  │  └─ templates/
+│  │     └─ hooks.json
+│  └─ codex_click_chooser_hooks/
+│     └─ ... thin compatibility shim during the rename
 └─ tests/
    ├─ *.json
    └─ fixtures/
@@ -341,6 +350,10 @@ Apply the install:
 PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --json
 ```
 
+If you renamed from an older checkout or still see an error that mentions
+`src/codex_click_chooser_hooks/...`, rerun `install` once. New installs rewrite
+`~/.codex/hooks.json` to point at `src/codex_next_step_hooks/...`.
+
 Override the Python interpreter or Codex home if needed:
 
 ```bash
@@ -353,6 +366,8 @@ What `install` does:
 - injects the current repo root into the hook commands added by this package
 - merges the hook entries from this package into `~/.codex/hooks.json`
 - creates a backup before writing if the file changes
+- rewrites older managed entries from the pre-rename package to the new script
+  paths
 
 ## Verify
 
@@ -407,6 +422,17 @@ Filter to one mode or change the example count:
 PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --mode ask_user --limit 3 --json
 ```
 
+## Rename Compatibility
+
+- new installs and docs use `codex-next-step-hooks` and
+  `codex_next_step_hooks`
+- the legacy console-script name `codex-click-chooser-hooks` still points at
+  the same CLI entrypoint
+- the repo also ships thin files under `src/codex_click_chooser_hooks/hooks/`
+  so older live sessions that still invoke the old hook paths do not fail with
+  `No such file or directory`
+- `uninstall` recognizes both the old and new managed hook markers
+
 ## Uninstall
 
 Preview the removal:
@@ -428,7 +454,8 @@ PYTHONPATH=src python3 -m codex_next_step_hooks.cli uninstall --codex-home /path
 ```
 
 `uninstall` removes only the hook entries added by this package and
-leaves unrelated hook configuration intact.
+leaves unrelated hook configuration intact, including during the rename window
+from the older package name.
 
 ## CLI Commands
 
@@ -442,6 +469,10 @@ leaves unrelated hook configuration intact.
   - supports repo-scoped or all-cwd scans, archived session inclusion, and date filtering
   - supports `--session-id`, `--mode`, and `--limit` for narrower inspection
 - `print-layout`: print the repo's key paths as JSON or a plain dict
+
+The canonical CLI examples in this README use `codex_next_step_hooks`, but the
+legacy console-script name `codex-click-chooser-hooks` is still available for
+compatibility.
 
 ## Runtime Configuration
 
@@ -458,6 +489,10 @@ The commands point at:
 
 - `src/codex_next_step_hooks/hooks/session_start_request_user_input_policy.py`
 - `src/codex_next_step_hooks/hooks/stop_require_request_user_input.py`
+
+For compatibility, thin wrapper files also exist under
+`src/codex_click_chooser_hooks/hooks/`, but new installs should point at the
+`codex_next_step_hooks` paths above.
 
 ## Future Improvements
 

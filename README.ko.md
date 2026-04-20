@@ -8,6 +8,11 @@
 정상 종료할지, 같은 턴에서 자동으로 이어갈지, 아니면 짧은 후속 질문을
 한 번 더 할지를 판단합니다.
 
+현재 기준 canonical 이름은 `codex-next-step-hooks`, canonical Python module
+path는 `codex_next_step_hooks`입니다. 이전 이름인
+`codex-click-chooser-hooks` / `codex_click_chooser_hooks`도 rename 전환
+기간 동안은 compatibility alias로 유지됩니다.
+
 ## 무엇을 하나요
 
 이 패키지는 Codex hook 두 개를 설치합니다.
@@ -266,6 +271,8 @@ customize하기 쉽게 만드는 쪽을 의도합니다.
 - repo 핵심 경로를 빠르게 확인하는 `print-layout` CLI
 - 런타임 및 endpoint 구성을 설명하는 contract 문서
 - judge mode와 짧은 rationale을 기록하는 transcript debug event
+- rename 직후에도 이미 떠 있는 세션과 옛 import 경로가 바로 깨지지 않도록
+  `src/codex_click_chooser_hooks/` 아래에 남겨둔 얇은 compatibility shim
 
 ## 현재 기능
 
@@ -291,21 +298,23 @@ codex-next-step-hooks/
 ├─ docs/
 │  └─ runtime-contract.md
 ├─ src/
-│  └─ codex_next_step_hooks/
-│     ├─ __init__.py
-│     ├─ cli.py
-│     ├─ doctor.py
-│     ├─ install.py
-│     ├─ observe.py
-│     ├─ uninstall.py
-│     ├─ merge.py
-│     ├─ runtime_paths.py
-│     ├─ selftest.py
-│     ├─ hooks/
-│     │  ├─ session_start_request_user_input_policy.py
-│     │  └─ stop_require_request_user_input.py
-│     └─ templates/
-│        └─ hooks.json
+│  ├─ codex_next_step_hooks/
+│  │  ├─ __init__.py
+│  │  ├─ cli.py
+│  │  ├─ doctor.py
+│  │  ├─ install.py
+│  │  ├─ observe.py
+│  │  ├─ uninstall.py
+│  │  ├─ merge.py
+│  │  ├─ runtime_paths.py
+│  │  ├─ selftest.py
+│  │  ├─ hooks/
+│  │  │  ├─ session_start_request_user_input_policy.py
+│  │  │  └─ stop_require_request_user_input.py
+│  │  └─ templates/
+│  │     └─ hooks.json
+│  └─ codex_click_chooser_hooks/
+│     └─ ... rename 전환용 thin compatibility shim
 └─ tests/
    ├─ *.json
    └─ fixtures/
@@ -339,6 +348,11 @@ PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --dry-run --json
 PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --json
 ```
 
+예전 checkout이나 rename 이전 설치 흔적 때문에
+`src/codex_click_chooser_hooks/...` 관련 에러가 보이면 `install`을 한 번 더
+실행하세요. 새 설치는 `~/.codex/hooks.json`을
+`src/codex_next_step_hooks/...` 경로로 다시 써 줍니다.
+
 필요하면 Python 인터프리터나 Codex home을 직접 지정할 수 있습니다.
 
 ```bash
@@ -351,6 +365,7 @@ PYTHONPATH=src python3 -m codex_next_step_hooks.cli install --python /path/to/py
 - 현재 repo root를 이 패키지가 추가하는 hook command에 반영합니다
 - 이 패키지가 추가하는 hook 항목을 `~/.codex/hooks.json`에 병합합니다
 - 파일이 바뀌면 쓰기 전에 backup을 만듭니다
+- rename 이전 패키지가 남긴 managed entry도 새 스크립트 경로 기준으로 다시 씁니다
 
 ## 검증
 
@@ -405,6 +420,17 @@ PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --all-cwds --date-fr
 PYTHONPATH=src python3 -m codex_next_step_hooks.cli observe --mode ask_user --limit 3 --json
 ```
 
+## Rename Compatibility
+
+- 새 설치와 문서는 `codex-next-step-hooks`, `codex_next_step_hooks`를 기준으로
+  설명합니다
+- legacy console script 이름 `codex-click-chooser-hooks`도 계속 같은 CLI를
+  가리키도록 남겨 두었습니다
+- 이미 떠 있는 오래된 세션이 여전히 예전 hook file path를 호출하더라도,
+  `src/codex_click_chooser_hooks/hooks/` 아래의 thin shim이 바로 죽지 않도록
+  막아 줍니다
+- `uninstall`은 old/new managed marker를 둘 다 인식합니다
+
 ## 제거
 
 먼저 제거 결과를 미리 봅니다.
@@ -426,7 +452,7 @@ PYTHONPATH=src python3 -m codex_next_step_hooks.cli uninstall --codex-home /path
 ```
 
 `uninstall`은 이 패키지가 추가한 항목만 제거하고, 관련 없는 hook 설정은
-그대로 둡니다.
+그대로 둡니다. rename 전환 기간의 옛 항목도 함께 정리할 수 있습니다.
 
 ## CLI 명령
 
@@ -440,6 +466,10 @@ PYTHONPATH=src python3 -m codex_next_step_hooks.cli uninstall --codex-home /path
   - repo 범위/전체 범위, archived 세션 포함, 날짜 필터를 지원
   - `--session-id`, `--mode`, `--limit`으로 더 좁게 볼 수 있습니다
 - `print-layout`: repo의 주요 경로를 JSON 또는 plain dict로 출력
+
+이 README의 CLI 예시는 모두 `codex_next_step_hooks` 기준으로 적었지만,
+호환성을 위해 legacy console script 이름 `codex-click-chooser-hooks`도 아직
+사용할 수 있습니다.
 
 ## 런타임 구성
 
@@ -456,6 +486,10 @@ PYTHONPATH=src python3 -m codex_next_step_hooks.cli uninstall --codex-home /path
 
 - `src/codex_next_step_hooks/hooks/session_start_request_user_input_policy.py`
 - `src/codex_next_step_hooks/hooks/stop_require_request_user_input.py`
+
+호환성을 위해 `src/codex_click_chooser_hooks/hooks/` 아래에도 thin wrapper가
+남아 있지만, 새 설치는 위 `codex_next_step_hooks` 경로를 기준으로 쓰는 것이
+정상입니다.
 
 ## 앞으로 개선할 점
 
