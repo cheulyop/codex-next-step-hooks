@@ -7,23 +7,8 @@
     "last_assistant_message": "A short next-step chooser usually works well after an explanatory response.\n\nIn many cases, options like do it now, show an example, or stop here are already enough."
   },
   "judge_result": {
-    "should_request": true,
-    "header": "Next Step",
-    "question": "How should we make the follow-up after an explanatory response more concrete?",
-    "options": [
-      {
-        "label": "Add sample fixture",
-        "description": "Create one more synthetic case where a chooser should appear after the explanation."
-      },
-      {
-        "label": "Refine decision rules",
-        "description": "Tighten the rules for what next actions to show after an explanatory closeout."
-      },
-      {
-        "label": "Stop here",
-        "description": "End with the current explanation only."
-      }
-    ]
+    "mode": "ask_user",
+    "continue_instruction": ""
   },
   "expected": {
     "decision": "block",
@@ -33,6 +18,8 @@
       "A short next-step chooser usually works well after an explanatory response."
     ],
     "reason_contains": [
+      "Generate the chooser header, exactly one chooser question",
+      "the natural single-select options yourself",
       "Do not ask the same or substantially similar chooser again",
       "immediately continue in the same turn",
       "Do not stop right after the `request_user_input` tool output"

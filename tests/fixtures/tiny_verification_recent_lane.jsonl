@@ -1,0 +1,4 @@
+{"type":"turn_context","payload":{"turn_id":"turn-300"}}
+{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Does the hook template still point at the packaged stop-hook script?"}]}}
+{"type":"turn_context","payload":{"turn_id":"turn-301"}}
+{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Confirmed. The hook template still points at the packaged stop-hook script."}]}}

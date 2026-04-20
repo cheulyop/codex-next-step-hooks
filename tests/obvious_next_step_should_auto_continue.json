@@ -1,0 +1,26 @@
+{
+  "name": "obvious_next_step_should_auto_continue",
+  "transcript_path": "tests/fixtures/obvious_next_step_recent_lane.jsonl",
+  "payload": {
+    "turn_id": "turn-201",
+    "stop_hook_active": true,
+    "last_assistant_message": "The chooser logic should probably move to a tri-state decision.\n\nThe obvious next step is to update the schema and split the stop-hook branch handling."
+  },
+  "judge_result": {
+    "mode": "auto_continue",
+    "continue_instruction": "Update the stop-hook schema to use mode=end|auto_continue|ask_user, then split the block-reason handling so ask_user and auto_continue have separate continuation prompts."
+  },
+  "expected": {
+    "decision": "block",
+    "context_contains": [
+      "<recent_chooser_summary>",
+      "implement the tri-state flow",
+      "The obvious next step is to update the schema and split the stop-hook branch handling."
+    ],
+    "reason_contains": [
+      "Do not ask the user another question or show a chooser here.",
+      "Continue immediately with this instruction:",
+      "mode=end|auto_continue|ask_user"
+    ]
+  }
+}

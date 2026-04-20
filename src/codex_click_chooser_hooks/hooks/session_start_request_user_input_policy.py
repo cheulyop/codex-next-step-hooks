@@ -8,12 +8,13 @@ def main() -> int:
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
             "additionalContext": (
-                "If a turn is ending and a short clickable chooser would reduce user "
-                "typing or make the next step easier, prefer the `request_user_input` "
-                "tool over a prose chooser. This can still apply when one next action is "
-                "clearly recommended. Ask one short question with 2-3 natural "
-                "single-select options. A combined option such as doing both A and B is "
-                "allowed when it fits the context."
+                "If a turn is ending, prefer automatic same-turn follow-through when "
+                "there is one clear next step. Use the `request_user_input` tool only "
+                "when the user needs to make a real choice that materially changes "
+                "the outcome, risk, or scope. When you do ask, ask one question "
+                "using natural single-select options that fit the context. A combined "
+                "option such as doing all relevant actions is allowed when it fits "
+                "the context."
             ),
         }
     }

@@ -1,0 +1,19 @@
+{
+  "name": "tiny_verification_should_end",
+  "transcript_path": "tests/fixtures/tiny_verification_recent_lane.jsonl",
+  "payload": {
+    "turn_id": "turn-301",
+    "stop_hook_active": true,
+    "last_assistant_message": "Confirmed. The hook template still points at the packaged stop-hook script."
+  },
+  "judge_result": {
+    "mode": "end",
+    "continue_instruction": ""
+  },
+  "expected": {
+    "decision": "continue",
+    "context_contains": [
+      "Confirmed. The hook template still points at the packaged stop-hook script."
+    ]
+  }
+}

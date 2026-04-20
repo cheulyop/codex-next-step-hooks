@@ -8,12 +8,21 @@ install-time template rendering flow.
 ## Judge Backend
 
 The `Stop` hook sends the current turn closeout to a small judge model and
-decides whether to end normally or show a `request_user_input` chooser.
+decides whether to:
+
+- end normally
+- auto-continue in the same turn without asking the user
+- show a `request_user_input` chooser
+
+The judge decides the tri-state outcome. When it returns `mode="ask_user"`,
+Codex generates the actual chooser question and options from the live session
+context in the same turn.
 
 Defaults:
 
 - endpoint: `http://127.0.0.1:10531/v1/responses`
-- model: `gpt-5.4-mini`
+- model: `gpt-5.4`
+- reasoning effort: `medium`
 - timeout: `8` seconds
 
 Implementation:
@@ -40,12 +49,22 @@ export CODEX_RUI_JUDGE_URL=http://127.0.0.1:10531/v1/responses
 
 ### `CODEX_RUI_JUDGE_MODEL`
 
-- meaning: model slug used for chooser judgment
-- default: `gpt-5.4-mini`
+- meaning: model slug used for follow-up judgment
+- default: `gpt-5.4`
 - use when: you want to tune cost, latency, or decision behavior
 
 ```bash
-export CODEX_RUI_JUDGE_MODEL=gpt-5.4-mini
+export CODEX_RUI_JUDGE_MODEL=gpt-5.4
+```
+
+### `CODEX_RUI_JUDGE_REASONING_EFFORT`
+
+- meaning: reasoning effort passed to the judge model
+- default: `medium`
+- use when: you want the judge to trade off speed and depth differently
+
+```bash
+export CODEX_RUI_JUDGE_REASONING_EFFORT=medium
 ```
 
 ### `CODEX_RUI_JUDGE_TIMEOUT_SECONDS`
@@ -93,5 +112,5 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --dry-run --json
 model configuration as the real hook.
 
 - endpoint unreachable or structured output failure: `fail`
-- endpoint reachable but no chooser recommendation for the sample closeout: `warn`
-- endpoint reachable and chooser recommendation returned as expected: `pass`
+- endpoint reachable but no follow-up action recommendation for the sample closeout: `warn`
+- endpoint reachable and a structured follow-up action recommendation returned as expected: `pass`

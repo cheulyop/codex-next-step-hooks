@@ -1,0 +1,6 @@
+{"type":"turn_context","payload":{"turn_id":"turn-200"}}
+{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Can we make this less chooser-happy and continue automatically when the next step is obvious?"}]}}
+{"type":"response_item","payload":{"type":"function_call","name":"request_user_input","call_id":"call-2","arguments":"{\"questions\":[{\"header\":\"Implementation lane\",\"question\":\"Which implementation lane should we take first?\",\"options\":[{\"label\":\"Implement the tri-state flow\",\"description\":\"Add end, auto-continue, and ask-user as explicit stop outcomes.\"},{\"label\":\"Tighten chooser threshold only\",\"description\":\"Keep the boolean schema and only ask for user input less often.\"},{\"label\":\"Stop here\",\"description\":\"Leave the current hook behavior as-is.\"}]}]}"}}
+{"type":"response_item","payload":{"type":"function_call_output","call_id":"call-2","output":"{\"answers\":{\"implementation_lane\":{\"answers\":[\"Implement the tri-state flow\"]}}}"}}
+{"type":"turn_context","payload":{"turn_id":"turn-201"}}
+{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"The chooser logic should probably move to a tri-state decision."}]}}

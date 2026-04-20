@@ -24,7 +24,7 @@ def run_install(
     existing = read_hooks_config(hooks_path)
     managed = load_managed_hooks(resolved_python)
     merged, changes = merge_hooks_config(existing, managed)
-    changed = changes["inserted_hooks"] > 0
+    changed = merged != existing
     backup_path = None
 
     if not dry_run and changed:

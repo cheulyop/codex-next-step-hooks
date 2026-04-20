@@ -19,6 +19,10 @@ def default_case_path() -> Path:
     return package_root() / "tests/explanatory_closure_should_request.json"
 
 
+def default_case_paths() -> list[Path]:
+    return sorted((package_root() / "tests").glob("*.json"))
+
+
 class FakeHTTPResponse:
     def __init__(self, payload: dict[str, Any]) -> None:
         self._payload = payload
@@ -43,7 +47,7 @@ def load_case(case_path: Path | None = None) -> dict[str, Any]:
     return case
 
 
-def run_selftest(case_path: Path | None = None) -> dict[str, Any]:
+def run_selftest_case(case_path: Path | None = None) -> dict[str, Any]:
     case = load_case(case_path)
     hook = SourceFileLoader("packaged_stop_hook", str(hook_path())).load_module()
 
@@ -98,3 +102,24 @@ def run_selftest(case_path: Path | None = None) -> dict[str, Any]:
     if reason_text:
         result["block_reason_preview"] = reason_text[:1000]
     return result
+
+
+def run_selftest(case_path: Path | None = None) -> dict[str, Any]:
+    if case_path is not None:
+        return run_selftest_case(case_path)
+
+    case_paths = default_case_paths()
+    if not case_paths:
+        return {
+            "ok": False,
+            "case_count": 0,
+            "cases": [],
+            "error": "no self-test case files were found under tests/",
+        }
+
+    results = [run_selftest_case(path) for path in case_paths]
+    return {
+        "ok": all(item.get("ok") for item in results),
+        "case_count": len(results),
+        "cases": results,
+    }

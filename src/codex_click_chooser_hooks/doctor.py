@@ -44,6 +44,7 @@ def run_live_judge_probe() -> dict[str, Any]:
             "status": "fail",
             "url": stop_hook.JUDGE_URL,
             "model": stop_hook.JUDGE_MODEL,
+            "reasoning_effort": stop_hook.JUDGE_REASONING_EFFORT,
             "timeout_seconds": stop_hook.JUDGE_TIMEOUT_SECONDS,
             "error": f"judge probe raised an exception: {exc}",
         }
@@ -53,42 +54,48 @@ def run_live_judge_probe() -> dict[str, Any]:
             "status": "fail",
             "url": stop_hook.JUDGE_URL,
             "model": stop_hook.JUDGE_MODEL,
+            "reasoning_effort": stop_hook.JUDGE_REASONING_EFFORT,
             "timeout_seconds": stop_hook.JUDGE_TIMEOUT_SECONDS,
             "error": "judge returned no structured response",
         }
 
-    options = stop_hook.normalize_options(judgment.get("options"))
-    should_request = judgment.get("should_request")
+    mode = stop_hook.normalize_mode(judgment.get("mode"))
     if (
-        not isinstance(should_request, bool)
-        or not isinstance(judgment.get("header"), str)
-        or not isinstance(judgment.get("question"), str)
-        or len(options) < 2
+        mode == "auto_continue"
+        and not stop_hook.normalize_continue_instruction(judgment)
     ):
         return {
             "status": "fail",
             "url": stop_hook.JUDGE_URL,
             "model": stop_hook.JUDGE_MODEL,
+            "reasoning_effort": stop_hook.JUDGE_REASONING_EFFORT,
             "timeout_seconds": stop_hook.JUDGE_TIMEOUT_SECONDS,
-            "error": "judge response did not satisfy the expected schema shape",
+            "error": "judge response did not satisfy the expected auto_continue shape",
             "raw_judgment": judgment,
         }
 
-    status = "pass" if should_request else "warn"
+    if mode == "end":
+        status = "warn"
+    else:
+        status = "pass"
     result = {
         "status": status,
         "url": stop_hook.JUDGE_URL,
         "model": stop_hook.JUDGE_MODEL,
+        "reasoning_effort": stop_hook.JUDGE_REASONING_EFFORT,
         "timeout_seconds": stop_hook.JUDGE_TIMEOUT_SECONDS,
-        "should_request": should_request,
-        "option_count": len(options),
-        "header": judgment.get("header", "").strip(),
-        "question": judgment.get("question", "").strip(),
+        "mode": mode,
     }
-    if not should_request:
+    if mode == "auto_continue":
+        result["continue_instruction"] = stop_hook.normalize_continue_instruction(
+            judgment
+        )
+    if mode == "ask_user":
+        result["chooser_generation"] = "codex_session"
+    if mode == "end":
         result["note"] = (
             "judge endpoint is reachable, but the sample explanatory closeout did "
-            "not produce a chooser recommendation"
+            "not produce a follow-up action recommendation"
         )
     return result
 

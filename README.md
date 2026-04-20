@@ -1,14 +1,18 @@
 # codex-click-chooser-hooks
 
 A public package for Codex hook workflows that turn natural closeout messages
-into recent-session-aware `request_user_input` choosers.
+into recent-session-aware tri-state follow-through decisions.
 
 ## What It Does
 
 This package installs two managed Codex hooks:
 
 - a `SessionStart` hook that loads chooser policy on startup and resume
-- a `Stop` hook that decides whether a closeout should end normally or show a short follow-up chooser
+- a `Stop` hook that decides whether a closeout should end normally, auto-continue in the same turn, or show a short follow-up chooser
+
+The judge model determines the `end` / `auto_continue` / `ask_user` mode. When
+`ask_user` is needed, Codex generates the actual chooser question and options
+from the live conversation context.
 
 The managed hooks are merged additively into `~/.codex/hooks.json`, and the
 `uninstall` command removes only the handlers owned by this package.
@@ -19,15 +23,15 @@ The managed hooks are merged additively into `~/.codex/hooks.json`, and the
 - additive `install` and `uninstall` commands for `hooks.json`
 - `doctor` checks for local package health
 - `doctor --live-judge` for a real structured probe against the configured judge endpoint
-- a deterministic self-test runner for chooser regressions
+- a deterministic self-test runner for follow-up decision regressions
 - a runtime contract for endpoint and environment configuration
 
 ## Current Capabilities
 
-- recent-session-aware chooser logic for Codex `Stop` hooks
+- recent-session-aware `end` / `auto_continue` / `ask_user` logic for Codex `Stop` hooks
 - startup policy loading through a paired `SessionStart` hook
 - template rendering for interpreter and repo-root aware hook commands
-- synthetic regression coverage for explanatory-closeout behavior
+- synthetic regression coverage for chooser, auto-continue, and end behavior
 - install-time and runtime verification commands for local environments
 
 ## Layout
@@ -55,9 +59,9 @@ codex-click-chooser-hooks/
 │     └─ templates/
 │        └─ hooks.json
 └─ tests/
-   ├─ explanatory_closure_should_request.json
+   ├─ *.json
    └─ fixtures/
-      └─ explanatory_closure_recent_lane.jsonl
+      └─ *.jsonl
 ```
 
 ## Quick Start
@@ -106,7 +110,7 @@ Run the live judge probe:
 PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --live-judge --json
 ```
 
-Run the deterministic regression case:
+Run the deterministic regression suite:
 
 ```bash
 PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli self-test --json
@@ -135,7 +139,7 @@ leaves unrelated hook configuration intact.
 - `uninstall`: remove only the managed handlers while leaving unrelated hook config intact
 - `doctor`: run static package and file checks
 - `doctor --live-judge`: probe the configured judge endpoint with a structured request
-- `self-test`: run the deterministic synthetic regression case
+- `self-test`: run the deterministic synthetic regression suite
 
 ## Runtime Configuration
 

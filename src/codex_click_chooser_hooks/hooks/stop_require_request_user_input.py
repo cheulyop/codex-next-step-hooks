@@ -6,6 +6,8 @@ import re
 import sys
 import urllib.error
 import urllib.request
+from datetime import datetime
+from datetime import timezone
 from pathlib import Path
 from typing import Any
 from typing import Dict
@@ -13,7 +15,8 @@ from typing import List
 from typing import Optional
 
 JUDGE_URL = os.environ.get("CODEX_RUI_JUDGE_URL", "http://127.0.0.1:10531/v1/responses")
-JUDGE_MODEL = os.environ.get("CODEX_RUI_JUDGE_MODEL", "gpt-5.4-mini")
+JUDGE_MODEL = os.environ.get("CODEX_RUI_JUDGE_MODEL", "gpt-5.4")
+JUDGE_REASONING_EFFORT = os.environ.get("CODEX_RUI_JUDGE_REASONING_EFFORT", "medium")
 JUDGE_TIMEOUT_SECONDS = float(os.environ.get("CODEX_RUI_JUDGE_TIMEOUT_SECONDS", "8"))
 STOP_SELECTION_TERMS = (
     "종료",
@@ -31,43 +34,37 @@ MAX_CONTEXT_TEXT_CHARS = 240
 
 SYSTEM_PROMPT = """You are a Codex stop-hook judge.
 
-Decide whether the assistant should end normally, or instead ask the user a
-short single-select `request_user_input` question offering 2-3 natural next
-actions.
+Decide among exactly three modes:
 
-Your main goal is to reduce user friction. Use `should_request=true` when a
-short chooser would likely save the user from having to type an obvious follow-
-up, make the next action easier to trigger, or reduce an otherwise likely extra
-turn. This often applies after result summaries, diagnosis outcomes,
-comparisons, design proposals, status checks, completion reports, or other
-closeout messages where the next user response would otherwise be a short go-
-ahead such as "continue", "do that", or "let's proceed".
+- `mode="end"`: let the assistant end normally.
+- `mode="auto_continue"`: stop the closeout and tell Codex to continue in the
+  same turn without asking the user.
+- `mode="ask_user"`: stop the closeout because user input is genuinely needed.
+  Codex will generate the actual `request_user_input` question and options in
+  the same turn.
 
-Do not require a chooser for every turn. Simple factual answers, very small
-verification replies, or cases where the user already clearly specified the
-next action will often end normally.
+Your main goal is useful progress with minimal friction. Do NOT ask the user
+just because a clickable chooser would be convenient.
 
-Explanatory, diagnostic, comparative, or summary-style assistant messages can
-still warrant a chooser. Use `should_request=true` when the explanation
-naturally leads to one or more concrete follow-up actions that would likely
-reduce user typing, even if the message does not explicitly present a menu or
-branching list.
+Prefer `mode="auto_continue"` when there is one clearly dominant next action
+that is already implied by the user's direction and does not depend on an
+unresolved preference choice. This often applies when the next step is simply
+to make the answer concrete, implement the obvious follow-through, inspect one
+clearly indicated file, run the natural next check, or continue down the lane
+the user already chose.
 
-Do not require explicit next-step phrases. If a reasonable user would likely
-reply with a short go-ahead such as "continue", "do that", "make it concrete",
-"go one level deeper", or "apply this", a chooser is often appropriate.
+Prefer `mode="ask_user"` only when the user needs to make a real decision:
+multiple plausible branches would materially change the outcome, there is a
+tradeoff between next steps, or approval or permission is still genuinely
+unresolved.
 
-If the assistant message is only a narrow factual confirmation or a tiny
-verification answer with no meaningful follow-up action, prefer
-`should_request=false`.
+Prefer `mode="end"` when the assistant message is already a sufficient ending:
+the reply is a narrow factual confirmation, a tiny verification answer, a
+completed result with no meaningful next step, or the task should stop here.
 
-Do not treat explanatory completeness by itself as a reason to avoid a chooser.
-A well-explained answer may still benefit from a chooser if the next action is
-obvious and clickable.
-
-In borderline cases, prefer the option that would make the interaction more
-useful and lower-friction for the user. Do not rely on rigid heuristics; judge
-from the actual conversational context.
+Do not treat explanatory completeness by itself as a reason to ask the user. A
+well-explained answer may still call for `auto_continue` if the next step is
+obvious, or `end` if the task is simply done.
 
 Use the recent session context, not just the last assistant message. Pay
 special attention to recent `request_user_input` questions, the options that
@@ -75,30 +72,29 @@ were already shown, and the user's selections or free-form answers.
 
 If the same or substantially similar chooser was already shown recently and the
 conversation did not materially advance to a new state, prefer
-`should_request=false`. Avoid repeating the same chooser across nearby turns,
-and avoid re-asking it within the same continued turn after the user already
-answered it.
+`mode="end"` or `mode="auto_continue"` instead of repeating the chooser. Avoid
+re-asking it within the same continued turn after the user already answered it.
 
 If the user answered a chooser with a free-form instruction, complaint, or
 course correction, treat that as real intent to act on rather than as a reason
 to ask the same chooser again.
 
-When generating options, prefer context-progressing actions that directly
-continue the explanation just given. The chooser should feel like a natural
-continuation of the explanation, not a detached or reset-style menu.
-
 If the user already selected a high-level lane recently, do not offer that same
 lane again. Move one level deeper and propose the next concrete actions within
-that lane.
+that lane if `mode="ask_user"` is still necessary. Otherwise prefer
+`mode="auto_continue"` and keep moving.
 
-It is acceptable if there is only one strongly recommended next action, as long
-as presenting it as a clickable option would still reduce typing and make the
-interaction easier. In that case, include that recommended action plus one or
-two natural alternatives such as asking for more detail or stopping here.
+When using `mode="ask_user"`, you are only deciding that user input is needed.
+Do not try to author the chooser itself. Codex will generate the actual
+question and options from the recent session context.
 
-Options must fit a single-select UI. They do NOT need to be pairwise exclusive
-in semantics. If natural, one option may combine actions, such as doing both A
-and B.
+When using `mode="auto_continue"`, provide a concise `continue_instruction`
+that tells Codex what to do next in the same turn. Do not ask the user in that
+mode.
+
+Return JSON only. For `mode="auto_continue"`, provide a non-empty
+`continue_instruction`. For `mode="end"` and `mode="ask_user"`,
+`continue_instruction` may be empty.
 
 Write the header, question, labels, and descriptions in the same language as
 the assistant final message unless there is a very strong reason not to.
@@ -108,24 +104,13 @@ JUDGE_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
-        "should_request": {"type": "boolean"},
-        "header": {"type": "string"},
-        "question": {"type": "string"},
-        "options": {
-            "type": "array",
-            "maxItems": 3,
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    "label": {"type": "string"},
-                    "description": {"type": "string"},
-                },
-                "required": ["label", "description"],
-            },
+        "mode": {
+            "type": "string",
+            "enum": ["end", "auto_continue", "ask_user"],
         },
+        "continue_instruction": {"type": "string"},
     },
-    "required": ["should_request", "header", "question", "options"],
+    "required": ["mode", "continue_instruction"],
 }
 
 
@@ -453,8 +438,9 @@ def judge_should_request(
             last_assistant_message,
             "</assistant_final_message>",
             "",
-            "Decide whether ending normally is best, or whether a short "
-            "`request_user_input` chooser would likely improve the interaction.",
+            "Decide whether the assistant should end, auto-continue in the same "
+            "turn without asking the user, or ask the user a short "
+            "`request_user_input` chooser.",
         ]
     )
 
@@ -482,7 +468,7 @@ def judge_should_request(
                 "schema": JUDGE_SCHEMA,
             }
         },
-        "reasoning": {"effort": "none"},
+        "reasoning": {"effort": JUDGE_REASONING_EFFORT},
     }
     request = urllib.request.Request(
         JUDGE_URL,
@@ -535,6 +521,83 @@ def normalize_options(raw_options: Any) -> List[Dict[str, str]]:
     return normalized
 
 
+def normalize_mode(value: Any) -> str:
+    if value in {"end", "auto_continue", "ask_user"}:
+        return value
+    return "end"
+
+
+def normalize_continue_instruction(judgment: Dict[str, Any]) -> str:
+    instruction = judgment.get("continue_instruction")
+    if not isinstance(instruction, str):
+        return ""
+    return instruction.strip()
+
+
+def ask_user_prompt_source() -> str:
+    return "codex_session"
+
+
+def build_stop_hook_debug_payload(
+    payload: Dict[str, Any],
+    *,
+    decision: str,
+    status: str,
+    judgment: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    debug_payload: Dict[str, Any] = {
+        "type": "stop_hook_judgment",
+        "hook_event": "Stop",
+        "turn_id": payload.get("turn_id"),
+        "decision": decision,
+        "status": status,
+        "judge_model": JUDGE_MODEL,
+        "judge_reasoning_effort": JUDGE_REASONING_EFFORT,
+    }
+    if not isinstance(judgment, dict):
+        return debug_payload
+
+    mode = normalize_mode(judgment.get("mode"))
+    debug_payload["mode"] = mode
+    debug_payload["raw_judgment"] = judgment
+
+    continue_instruction = normalize_continue_instruction(judgment)
+    if continue_instruction:
+        debug_payload["continue_instruction"] = continue_instruction
+
+    if mode == "ask_user":
+        debug_payload["ask_user_prompt_source"] = ask_user_prompt_source()
+
+    return debug_payload
+
+
+def append_stop_hook_debug_event(payload: Dict[str, Any]) -> None:
+    debug_payload = payload.get("_stop_hook_debug")
+    transcript_path = payload.get("transcript_path")
+    if not isinstance(debug_payload, dict):
+        return
+    if not isinstance(transcript_path, str) or not transcript_path:
+        return
+
+    path = Path(transcript_path)
+    if not path.exists():
+        return
+
+    event = {
+        "timestamp": datetime.now(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z"),
+        "type": "event_msg",
+        "payload": debug_payload,
+    }
+    try:
+        with path.open("a") as handle:
+            handle.write(json.dumps(event, ensure_ascii=False))
+            handle.write("\n")
+    except OSError:
+        return
+
+
 def render_recent_chooser_history(recent_choosers: List[Dict[str, Any]]) -> str:
     if not recent_choosers:
         return ""
@@ -556,58 +619,22 @@ def render_recent_chooser_history(recent_choosers: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def build_block_reason(
+def build_ask_user_block_reason(
     judgment: Dict[str, Any], recent_choosers: List[Dict[str, Any]]
 ) -> str:
-    header = judgment.get("header")
-    question = judgment.get("question")
-    options = normalize_options(judgment.get("options"))
+    del judgment
     recent_history_block = render_recent_chooser_history(recent_choosers)
     anti_repeat_instruction = (
         "Do not ask the same or substantially similar chooser again if the recent "
         "history already offered it. Treat free-form answers as new user intent to "
         "act on, not as a cue to re-ask the same chooser."
     )
-    if not isinstance(header, str) or not header.strip():
-        header = "Next Step"
-    else:
-        header = header.strip()[:12]
-    if not isinstance(question, str) or not question.strip() or len(options) < 2:
-        parts = [
-            "Use the `request_user_input` tool now. Do not send another prose answer. "
-            "Ask one short question with 2-3 natural next-step options, then wait for "
-            "the user's selection.",
-        ]
-        if recent_history_block:
-            parts.extend(["", recent_history_block])
-        parts.extend(
-            [
-                "",
-                anti_repeat_instruction,
-                "",
-                "After the user selects an option, immediately continue in the same turn by "
-                "carrying out the selected next action. Treat the selected option as the "
-                "user's new instruction. Do not end with an empty or placeholder final "
-                "answer. If the selected option asks for more detail, provide that detail "
-                "immediately. If the selected option is to stop or finish here, end normally.",
-            ]
-        )
-        return "\n".join(parts)
-
-    option_lines = []
-    for index, option in enumerate(options, start=1):
-        option_lines.append(
-            f"{index}. {option['label']} - {option['description']}"
-        )
-    rendered_options = "\n".join(option_lines)
     parts = [
         "Use the `request_user_input` tool now. Do not send another prose or bullet-list "
-        "answer. Ask the user exactly one short question, using this structure:",
-        f"Header: {header}",
-        f"Question: {question.strip()}",
-        "Options:",
-        rendered_options,
-        "Then wait for the user's selection.",
+        "answer.",
+        "Generate the chooser header, exactly one chooser question, and the natural "
+        "single-select options yourself from the recent session context and the "
+        "assistant message that just ended, then wait for the user's selection.",
     ]
     if recent_history_block:
         parts.extend(["", recent_history_block])
@@ -615,6 +642,10 @@ def build_block_reason(
         [
             "",
             anti_repeat_instruction,
+            "",
+            "The chooser should feel like a natural continuation of the just-finished "
+            "answer, not a reset-style menu. Use options that materially move the work "
+            "forward, and combine actions when that is the most natural single choice.",
             "",
             "After the user selects an option, immediately continue in the same turn by "
             "carrying out the selected next action. Treat the selected option as the "
@@ -627,9 +658,55 @@ def build_block_reason(
     return "\n".join(parts)
 
 
+def build_auto_continue_block_reason(
+    judgment: Dict[str, Any], recent_choosers: List[Dict[str, Any]]
+) -> str:
+    instruction = normalize_continue_instruction(judgment)
+    recent_history_block = render_recent_chooser_history(recent_choosers)
+    parts = [
+        "Do not ask the user another question or show a chooser here.",
+        "The next step is clear enough to continue in the same turn without "
+        "waiting for user input.",
+        "",
+        "Continue immediately with this instruction:",
+        instruction,
+    ]
+    if recent_history_block:
+        parts.extend(["", recent_history_block])
+    parts.extend(
+        [
+            "",
+            "Treat the user's recent direction and chooser answers as already "
+            "settled intent. Do not re-ask the same branching question unless "
+            "a genuinely new hidden risk or materially different outcome appears.",
+            "",
+            "Carry out the instruction now. Do not stop with a plan-only, "
+            "placeholder, or empty answer. If completing the instruction fully "
+            "finishes the task, reply with the concrete result. If a new "
+            "decision point appears that materially changes the outcome, then "
+            "ask the user at that point.",
+        ]
+    )
+    return "\n".join(parts)
+
+
+def build_block_reason(
+    judgment: Dict[str, Any], recent_choosers: List[Dict[str, Any]]
+) -> str:
+    mode = normalize_mode(judgment.get("mode"))
+    if mode == "auto_continue":
+        return build_auto_continue_block_reason(judgment, recent_choosers)
+    return build_ask_user_block_reason(judgment, recent_choosers)
+
+
 def should_continue(payload: Dict[str, Any]) -> bool:
     message = payload.get("last_assistant_message")
     if not isinstance(message, str) or not message.strip():
+        payload["_stop_hook_debug"] = build_stop_hook_debug_payload(
+            payload,
+            decision="continue",
+            status="empty_last_assistant_message",
+        )
         return True
     transcript_path = payload.get("transcript_path")
     turn_id = payload.get("turn_id")
@@ -644,6 +721,11 @@ def should_continue(payload: Dict[str, Any]) -> bool:
         recent_choosers = context.get("recent_choosers", [])
         current_turn_requests = context.get("current_turn_requests", [])
     if latest_answer_is_explicit_stop(current_turn_requests):
+        payload["_stop_hook_debug"] = build_stop_hook_debug_payload(
+            payload,
+            decision="continue",
+            status="explicit_stop_already_selected",
+        )
         return True
     judgment = judge_should_request(
         message,
@@ -652,20 +734,56 @@ def should_continue(payload: Dict[str, Any]) -> bool:
         recent_choosers,
     )
     if judgment is None:
+        payload["_stop_hook_debug"] = build_stop_hook_debug_payload(
+            payload,
+            decision="continue",
+            status="judge_unavailable",
+        )
         return True
-    if judgment.get("should_request") is not True:
+    mode = normalize_mode(judgment.get("mode"))
+    if mode == "end":
+        payload["_stop_hook_debug"] = build_stop_hook_debug_payload(
+            payload,
+            decision="continue",
+            status="mode_end",
+            judgment=judgment,
+        )
+        return True
+    if mode == "auto_continue" and not normalize_continue_instruction(judgment):
+        payload["_stop_hook_debug"] = build_stop_hook_debug_payload(
+            payload,
+            decision="continue",
+            status="invalid_auto_continue_missing_instruction",
+            judgment=judgment,
+        )
+        return True
+    if mode != "ask_user" and mode != "auto_continue":
+        payload["_stop_hook_debug"] = build_stop_hook_debug_payload(
+            payload,
+            decision="continue",
+            status="invalid_mode",
+            judgment=judgment,
+        )
         return True
     payload["_judgment"] = judgment
     payload["_recent_choosers"] = recent_choosers
+    payload["_stop_hook_debug"] = build_stop_hook_debug_payload(
+        payload,
+        decision="block",
+        status="mode_ask_user" if mode == "ask_user" else "mode_auto_continue",
+        judgment=judgment,
+    )
     return False
 
 
 def main() -> int:
     payload = json.load(sys.stdin)
     if should_continue(payload):
+        append_stop_hook_debug_event(payload)
         print(json.dumps({"continue": True}))
         return 0
 
+    append_stop_hook_debug_event(payload)
     print(
         json.dumps(
             {

@@ -121,6 +121,9 @@ def merge_hooks_config(
             if not isinstance(group_hooks, list):
                 raise ValueError(f"Expected hook list for {event_name}")
 
+            original_identities = {
+                hook_identity(hook) for hook in group_hooks if isinstance(hook, dict)
+            }
             target_group["hooks"] = [
                 hook for hook in group_hooks if not is_managed_hook(hook)
             ]
@@ -132,11 +135,11 @@ def merge_hooks_config(
             inserted_here = 0
             for hook in managed_group.get("hooks", []):
                 identity = hook_identity(hook)
-                if identity in existing_identities:
-                    continue
-                target_group["hooks"].append(deepcopy(hook))
-                existing_identities.add(identity)
-                inserted_here += 1
+                if identity not in existing_identities:
+                    target_group["hooks"].append(deepcopy(hook))
+                    existing_identities.add(identity)
+                if identity not in original_identities:
+                    inserted_here += 1
             if inserted_here:
                 changes["updated_events"].append(event_name)
                 changes["inserted_hooks"] += inserted_here
