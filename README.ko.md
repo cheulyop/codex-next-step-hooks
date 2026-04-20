@@ -12,8 +12,8 @@
 
 이 패키지는 Codex hook 두 개를 설치합니다.
 
-- 시작 또는 resume 시 Codex 세션에 짧은 closeout 정책을 넣는
-  `SessionStart` hook
+- 시작 또는 resume 시, 같은 턴에서 자연스럽게 이어갈지에 대한 기본 원칙을
+  불러오는 `SessionStart` hook
 - 마무리 응답을 정상 종료할지, 같은 턴에서 자동으로 이어갈지, 짧은 후속 chooser를 보여줄지 결정하는 `Stop` hook
 
 judge 모델은 최근 대화 맥락을 보고 `end` / `auto_continue` / `ask_user`
@@ -25,41 +25,46 @@ judge 모델은 최근 대화 맥락을 보고 `end` / `auto_continue` / `ask_us
 
 ## 동작 방식
 
-1. `SessionStart`가 startup 과 resume 시점에 실행되어
-   `hookSpecificOutput.additionalContext`에 짧은 정책 문구를 넣습니다.
-   - clear next step이 하나이면 같은 턴에서 자동으로 이어서 진행하라고 알려줍니다
-   - 실제로 갈림길 선택이 필요할 때만 `request_user_input`를 쓰라고 알려줍니다
-2. 턴이 끝나기 직전에 `Stop` hook 이 실행됩니다.
-3. `Stop` hook 은 transcript에서 최근 turn 기록을 다시 구성합니다. 여기서
-   `turn`은 `turn_id`를 기준으로 묶인 하나의 재구성된 대화 단위입니다.
-   내부적으로는 각 turn이 raw `user_messages`, `assistant_messages`,
-   `requests`, `timeline` 필드를 따로 들지 않고, 순서가 보존된 하나의
-   `entries` stream을 유지합니다.
-4. 현재 turn에 대해서는 전체 transcript를 그대로 보내지 않고 compact한
-   summary를 만듭니다.
-   - 최근 turn window: 최대 `6`개 turn
-   - chooser history window: 최대 `6`개 chooser
-   - current-turn message-sequence window: 최대 `12`개 derived message item
-     여기서 각 item은 ordered `entries` stream에서 다시 복원한 user 또는
-     assistant message 하나를 뜻합니다
-   - assistant message count, chooser count 같은 coarse turn-shape 카운트
-5. 이 compact prompt를 judge 모델로 보냅니다.
-6. judge는 세 가지 structured mode 중 하나를 반환합니다.
+1. `SessionStart`는 세션을 시작하거나 resume할 때 짧은 기본 원칙을 불러옵니다.
+   - clear next step이 하나이면 같은 턴에서 바로 이어서 진행
+   - 실제로 선택이 필요할 때만 한 번 질문
+2. 턴이 끝나기 직전에 `Stop` hook이 실행됩니다.
+3. `Stop` hook은 최근 대화 흐름, 최근 chooser 내역, 막 끝나려는 assistant
+   응답을 모아 judge 모델에 보냅니다.
+4. judge는 세 가지 structured mode 중 하나를 반환합니다.
    - `end`: assistant 응답을 정상 종료
    - `auto_continue`: 사용자에게 묻지 않고 같은 턴에서 계속 진행
    - `ask_user`: 멈춘 뒤 Codex가 실제 후속 chooser를 제시
-7. 메인 Codex 세션은 그 결과를 실제로 수행합니다.
+5. 메인 Codex 세션은 그 결과를 실제로 수행합니다.
    - `end`: 턴이 그대로 종료됩니다
    - `auto_continue`: continue instruction을 받아 같은 턴에서 계속 움직입니다
    - `ask_user`: live session context를 바탕으로 실제 `request_user_input`
      질문과 옵션을 생성합니다
-8. 이후 transcript에는 `stop_hook_judgment` debug event가 추가되어,
+6. 이후 transcript에는 `stop_hook_judgment` debug event가 추가되어,
    나중에 `observe`로 실제 판단을 다시 볼 수 있습니다.
 
-judge 모델은 mode, rationale, optional `continue_instruction`만 결정합니다.
-실제 chooser 문항은 judge가 아니라 메인 Codex 세션이 작성합니다.
+judge는 세 가지 결과 중 하나와 짧은 이유를 돌려줍니다. 실제 chooser 문항은
+judge가 아니라 메인 Codex 세션이 작성합니다.
+
+예를 들면 이렇게 동작합니다.
+
+- assistant가 `경로 확인됐습니다.`로 끝나면 보통 그냥 종료됩니다
+- assistant가 `패치는 반영됐고 다음 단계는 self-test 실행입니다.`로 끝나면
+  보통 같은 턴에서 계속 진행합니다
+- assistant가 `프롬프트를 다듬을지, observe를 먼저 볼지 정해야 합니다.`처럼
+  두 갈래를 열면 보통 chooser를 한 번 띄웁니다
 
 ## Judge Endpoint
+
+이 패키지는 judge endpoint를 직접 제공하지 않습니다. 먼저 사용 가능한
+OpenAI-compatible `responses` backend를 연결해야 합니다.
+
+보통은 다음 환경 변수를 설정합니다.
+
+- `CODEX_RUI_JUDGE_URL`
+- `CODEX_RUI_JUDGE_MODEL`
+- `CODEX_RUI_JUDGE_REASONING_EFFORT`
+- `CODEX_RUI_JUDGE_TIMEOUT_SECONDS`
 
 judge 쪽에는 다음이 필요합니다.
 
@@ -68,111 +73,44 @@ judge 쪽에는 다음이 필요합니다.
 - hook timeout 안에 응답을 돌려줄 수 있는 latency
 - `mode`, `continue_instruction`, `rationale`를 반환할 수 있는 백엔드
 
-기본 judge 설정:
+현재 코드의 fallback 값은 다음과 같습니다.
 
-- endpoint: `http://127.0.0.1:10531/v1/responses`
+- endpoint: `http://127.0.0.1:10531/v1/responses` (`CODEX_RUI_JUDGE_URL` 미설정 시)
 - model: `gpt-5.4`
 - reasoning effort: `medium`
 - timeout: `30`초
 
-다음 환경 변수로 바꿀 수 있습니다.
-
-- `CODEX_RUI_JUDGE_URL`
-- `CODEX_RUI_JUDGE_MODEL`
-- `CODEX_RUI_JUDGE_REASONING_EFFORT`
-- `CODEX_RUI_JUDGE_TIMEOUT_SECONDS`
+위 endpoint는 로컬 개발 환경에서만 바로 맞을 가능성이 높습니다. 새 사용자는
+대개 자신의 judge backend URL을 명시적으로 설정하는 편이 안전합니다.
 
 전체 런타임 contract는 [docs/runtime-contract.md](docs/runtime-contract.md)를
 보세요.
 
-## Judge가 보는 입력
+## Judge는 무엇을 참고하나요
 
-Stop hook은 raw transcript 전체를 그대로 judge에 보내지 않습니다. 현재
-작업 lane을 반영하는 compact text prompt를 보냅니다.
+Stop hook은 raw transcript 전체를 그대로 보내지 않고, 현재 작업 흐름을
+짧게 압축해서 judge에 보냅니다.
 
-현재 turn 요약은 대략 이런 순서로 만들어집니다.
+judge가 주로 참고하는 것은 다음 네 가지입니다.
 
-1. transcript에서 최근 turn들을 ordered `entries`로 다시 구성합니다
-2. 그 `entries`에서 현재 turn의 message sequence view와 chooser history를 파생합니다
-3. assistant message count, chooser count 같은 coarse turn-shape 카운트를 계산합니다
-4. 최신 user message 이후의 derived message sequence를 current-turn 핵심 블록으로 유지합니다
-5. 최근 chooser history를 별도 블록으로 붙여서, 이미 무엇을 보여줬고 어떤 응답이 있었는지 judge가 볼 수 있게 합니다
+- 최근 몇 턴의 대화 흐름
+- 최근 chooser 질문과 사용자의 선택
+- 현재 턴에서 assistant가 이미 얼마나 진행했는지
+- 지금 막 끝나려는 마지막 assistant 응답
 
-현재 raw turn shape는 대략 이렇습니다.
-
-```python
-turn = {
-  "turn_id": "t2",
-  "entries": [
-    {"kind": "message", "role": "user", "text": "U1"},
-    {"kind": "message", "role": "assistant", "text": "A1"},
-    {"kind": "request_user_input", "call_id": "c1", "...": "..."},
-    {"kind": "request_user_input_output", "call_id": "c1", "answers": ["A"]},
-    {"kind": "message", "role": "user", "text": "U2"},
-    {"kind": "message", "role": "assistant", "text": "A2"},
-  ],
-}
-```
-
-이제 raw `timeline` 필드는 없습니다. 이 ordered stream에서 judge가 보는
-`last_user_message`, `recent_choosers`, `timeline_since_last_user`,
-각종 count 필드를 다시 계산합니다.
-
-judge prompt 안에서는 여전히
-`<current_turn_timeline_since_last_user>`라는 블록 이름을 쓰지만, 이 값도
-이제 `entries`에서 파생한 view이지 raw stored field는 아닙니다.
-
-현재 prompt 형태는 대략 이렇습니다.
+예를 들어 judge에는 대략 이런 정보가 들어갑니다.
 
 ```text
-Recent session context follows.
-
-<recent_session_context>
-<turn id="...">
-<last_user_message>
-...
-</last_user_message>
-</turn>
-</recent_session_context>
-
-<current_turn_state>
-- user_message_count: ...
-- assistant_message_count: ...
-- request_user_input_count: ...
-- assistant_messages_since_last_user: ...
-</current_turn_state>
-
-<current_turn_timeline_since_last_user>
-- user|assistant: ...
-</current_turn_timeline_since_last_user>
-
-<recent_chooser_summary>
-- question: ...
-  options: ...
-  user_answer: ...
-</recent_chooser_summary>
-
-<assistant_final_message>
-...
-</assistant_final_message>
+최근 흐름:
+- user: README 설명을 더 간단하게 정리해 주세요
+- assistant: README 수정과 검증을 마쳤습니다
+- recent chooser: "다음엔 무엇을 할까요?" -> "검증 후 커밋"
+- final assistant message: "검증은 끝났습니다. 이제 커밋할 수 있습니다."
 ```
 
-실제로는 judge가 다음 정보를 봅니다.
-
-- 최근 turn 단위의 사용자 질문 흐름
-- 현재 turn 안에서 assistant가 이미 얼마나 많이 진행했는지
-- 최신 user message 이후의 current-turn timeline
-- 최근 chooser 질문, 옵션, 사용자 응답
-- 지금 막 끝나려는 final assistant message
-
-예전 revision보다 현재 prompt가 더 좁고 단순한 이유는, 이미 중복 projection을
-여럿 제거했기 때문입니다.
-
-- top-level duplicate `last_user_message`
-- `current_turn_user_messages`
-- `current_turn_assistant_history_before_final`
-- `current_turn_recent_timeline`
-- turn-local `request_user_input_history`
+이런 경우 judge는 보통 `auto_continue` 쪽으로 기울 수 있습니다. 반대로
+마지막 assistant 응답이 두 개 이상의 실질적인 다음 방향을 열어두면
+`ask_user` 쪽으로 기울 수 있습니다.
 
 ## Judge가 반환하는 값
 
@@ -325,6 +263,7 @@ customize하기 쉽게 만드는 쪽을 의도합니다.
 - 현재 judge endpoint에 실제 structured probe를 보내는 `doctor --live-judge`
 - follow-up decision 회귀를 위한 deterministic self-test
 - transcript 단위 judge calibration과 mode/rationale 점검용 `observe` CLI
+- repo 핵심 경로를 빠르게 확인하는 `print-layout` CLI
 - 런타임 및 endpoint 구성을 설명하는 contract 문서
 - judge mode와 짧은 rationale을 기록하는 transcript debug event
 
@@ -337,6 +276,7 @@ customize하기 쉽게 만드는 쪽을 의도합니다.
 - ask-user, auto-continue, end 동작에 대한 synthetic regression coverage
 - 로컬 환경용 install 및 runtime verification 명령
 - mode 비율, override, rationale 패턴을 보는 transcript 기반 observability
+- ordered `turn.entries` source-of-truth와 거기서 파생한 judge용 view
 
 ## 구조
 
@@ -381,6 +321,7 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --json
 PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --live-judge --json
 PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli self-test --json
 PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --json
+PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli print-layout --json
 ```
 
 ## 설치
@@ -396,6 +337,12 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --dry-run --json
 
 ```bash
 PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --json
+```
+
+필요하면 Python 인터프리터나 Codex home을 직접 지정할 수 있습니다.
+
+```bash
+PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --python /path/to/python --codex-home /path/to/.codex --json
 ```
 
 `install`이 하는 일:
@@ -431,6 +378,9 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli self-test --json
 PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --json
 ```
 
+기본적으로 `observe`는 현재 working directory 기준으로만 집계합니다.
+모든 cwd를 같이 보려면 `--all-cwds`를 쓰면 됩니다.
+
 특정 과거 세션만 보기:
 
 ```bash
@@ -449,6 +399,12 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --all-cwds --inc
 PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --all-cwds --date-from 2026-04-20 --date-to 2026-04-20 --json
 ```
 
+특정 mode만 보거나 example 개수를 줄일 수도 있습니다.
+
+```bash
+PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --mode ask_user --limit 3 --json
+```
+
 ## 제거
 
 먼저 제거 결과를 미리 봅니다.
@@ -463,6 +419,12 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli uninstall --dry-run --js
 PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli uninstall --json
 ```
 
+다른 Codex home을 대상으로 제거할 수도 있습니다.
+
+```bash
+PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli uninstall --codex-home /path/to/.codex --json
+```
+
 `uninstall`은 이 패키지가 추가한 항목만 제거하고, 관련 없는 hook 설정은
 그대로 둡니다.
 
@@ -473,8 +435,11 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli uninstall --json
 - `doctor`: 정적 파일 및 패키지 상태 점검
 - `doctor --live-judge`: judge endpoint에 structured request를 보내 실제 응답 점검
 - `self-test`: deterministic synthetic regression suite 실행
+  - `--case /path/to/test.json`으로 단일 케이스만 돌릴 수 있습니다
 - `observe`: calibration용 `stop_hook_judgment` 이벤트 요약
   - repo 범위/전체 범위, archived 세션 포함, 날짜 필터를 지원
+  - `--session-id`, `--mode`, `--limit`으로 더 좁게 볼 수 있습니다
+- `print-layout`: repo의 주요 경로를 JSON 또는 plain dict로 출력
 
 ## 런타임 구성
 

@@ -11,8 +11,8 @@ automatically, or ask one clear follow-up question.
 
 This package installs two Codex hooks:
 
-- a `SessionStart` hook that loads a short closeout policy into the Codex
-  session on startup and resume
+- a `SessionStart` hook that loads the basic "keep going vs ask once" policy
+  when a Codex session starts or resumes
 - a `Stop` hook that decides whether a closeout should end normally, auto-continue in the same turn, or show a short follow-up chooser
 
 The judge model picks the `end` / `auto_continue` / `ask_user` mode by looking
@@ -25,41 +25,48 @@ package.
 
 ## How It Works
 
-1. `SessionStart` runs on startup and resume and writes a short policy into
-   `hookSpecificOutput.additionalContext` for the Codex session.
-   - it tells Codex to prefer automatic same-turn follow-through when one
-     clear next step exists
-   - it tells Codex to use `request_user_input` only when the user really
-     needs to choose among materially different next paths
+1. `SessionStart` loads a short startup policy when a session starts or resumes.
+   - if there is one clear next step, prefer same-turn follow-through
+   - ask only when the user truly needs to choose
 2. `Stop` runs when a turn is about to end.
-3. The `Stop` hook rebuilds recent turn history from the transcript. Here, a
-   `turn` is one reconstructed conversation unit keyed by `turn_id`. Internally,
-   each turn keeps one ordered `entries` stream instead of separate raw
-   `user_messages`, `assistant_messages`, `requests`, and `timeline` fields.
-4. For the current turn, it derives a compact summary instead of shipping the
-   whole transcript:
-   - recent turn window: up to `6` turns
-   - chooser history window: up to `6` recent choosers
-   - current-turn message-sequence window: up to `12` derived message entries,
-     reconstructed from the ordered `entries` stream
-   - current-turn counts such as assistant message count and chooser count
-5. The hook sends that compact prompt to a judge model.
-6. The judge returns one of three structured modes:
+3. The `Stop` hook bundles recent conversation flow, recent chooser history,
+   and the assistant message that is about to end, then sends that summary to
+   the judge model.
+4. The judge returns one of three structured modes:
    - `end`: let the assistant finish normally
    - `auto_continue`: keep going in the same turn without asking the user
    - `ask_user`: stop and let Codex ask one real follow-up chooser
-7. The main Codex session carries out that result:
+5. The main Codex session carries out that result:
    - `end`: the turn closes normally
    - `auto_continue`: Codex receives a continue instruction and keeps moving
    - `ask_user`: Codex generates the actual `request_user_input` question and
      options from the live session context
-8. The hook appends a `stop_hook_judgment` debug event to the transcript so
+6. The hook appends a `stop_hook_judgment` debug event to the transcript so
    you can inspect what happened later with `observe`.
 
-The judge model only decides the mode and returns a short rationale plus an
-optional `continue_instruction`. It does not generate the chooser itself.
+The judge only returns the mode, a short rationale, and an optional
+`continue_instruction`. It does not generate the chooser itself.
+
+For example:
+
+- if the assistant ends with `Confirmed. The path is correct.`, the turn
+  usually just ends
+- if the assistant ends with `The patch is in, and the next step is to run
+  self-test.`, Codex usually keeps going in the same turn
+- if the assistant ends with `We can either tighten the prompt or inspect more
+  real transcripts.`, Codex usually shows one chooser
 
 ## Judge Endpoint
+
+This package does not provide a judge endpoint by itself. You need to connect
+an OpenAI-compatible `responses` backend first.
+
+In practice, you usually set:
+
+- `CODEX_RUI_JUDGE_URL`
+- `CODEX_RUI_JUDGE_MODEL`
+- `CODEX_RUI_JUDGE_REASONING_EFFORT`
+- `CODEX_RUI_JUDGE_TIMEOUT_SECONDS`
 
 The judge side requires:
 
@@ -68,114 +75,44 @@ The judge side requires:
 - a response that arrives within the hook timeout window
 - support for returning `mode`, `continue_instruction`, and `rationale`
 
-Default judge settings:
+The current code-level fallback values are:
 
-- endpoint: `http://127.0.0.1:10531/v1/responses`
+- endpoint: `http://127.0.0.1:10531/v1/responses` when `CODEX_RUI_JUDGE_URL` is
+  unset
 - model: `gpt-5.4`
 - reasoning effort: `medium`
 - timeout: `30` seconds
 
-You can change those with:
-
-- `CODEX_RUI_JUDGE_URL`
-- `CODEX_RUI_JUDGE_MODEL`
-- `CODEX_RUI_JUDGE_REASONING_EFFORT`
-- `CODEX_RUI_JUDGE_TIMEOUT_SECONDS`
+That endpoint is mostly useful as a local-development fallback. New users
+should usually point the hook at their own judge backend explicitly.
 
 For the full runtime contract, see [docs/runtime-contract.md](docs/runtime-contract.md).
 
-## What The Judge Sees
+## What The Judge Looks At
 
 The stop hook does not send the raw transcript wholesale. It sends a compact
-text prompt that reflects the current lane of work.
+summary of the current lane of work.
 
-Current-turn summarization works like this:
+The judge mainly looks at:
 
-1. rebuild recent turns from the transcript as ordered `entries`
-2. derive the current turn's message sequence view and chooser history from those
-   entries
-3. compute coarse turn-shape counters such as assistant message count and
-   chooser count
-4. keep the derived message sequence from the latest user message onward as the main
-   current-turn block
-5. attach recent chooser history separately so the judge can see what was
-   already offered and selected
+- the last few turns of conversation
+- the most recent chooser questions and what the user selected
+- how much work the assistant already did in the current turn
+- the final assistant message that is about to end
 
-The raw turn shape now looks like this:
-
-```python
-turn = {
-  "turn_id": "t2",
-  "entries": [
-    {"kind": "message", "role": "user", "text": "U1"},
-    {"kind": "message", "role": "assistant", "text": "A1"},
-    {"kind": "request_user_input", "call_id": "c1", "...": "..."},
-    {"kind": "request_user_input_output", "call_id": "c1", "answers": ["A"]},
-    {"kind": "message", "role": "user", "text": "U2"},
-    {"kind": "message", "role": "assistant", "text": "A2"},
-  ],
-}
-```
-
-There is no raw `timeline` field anymore. From that ordered stream, the hook
-derives the judge-facing `last_user_message`, `recent_choosers`,
-`timeline_since_last_user`, and count fields.
-
-The judge prompt still uses the block name
-`<current_turn_timeline_since_last_user>`, but that block is now a derived view
-from `entries`, not a raw stored field.
-
-The current shape is:
+For example, the summary might effectively say:
 
 ```text
-Recent session context follows.
-
-<recent_session_context>
-<turn id="...">
-<last_user_message>
-...
-</last_user_message>
-</turn>
-</recent_session_context>
-
-<current_turn_state>
-- user_message_count: ...
-- assistant_message_count: ...
-- request_user_input_count: ...
-- assistant_messages_since_last_user: ...
-</current_turn_state>
-
-<current_turn_timeline_since_last_user>
-- user|assistant: ...
-</current_turn_timeline_since_last_user>
-
-<recent_chooser_summary>
-- question: ...
-  options: ...
-  user_answer: ...
-</recent_chooser_summary>
-
-<assistant_final_message>
-...
-</assistant_final_message>
+Recent flow:
+- user: Please simplify the README explanation
+- assistant: I updated the README and finished verification
+- recent chooser: "What should we do next?" -> "Verify, then commit"
+- final assistant message: "Verification is done, so the next step is to commit."
 ```
 
-In practice, that means the judge sees:
-
-- recent turn-by-turn user prompts
-- how much assistant work already happened in the current turn
-- the current turn timeline since the latest user message
-- the most recent chooser history and user selections
-- the final assistant message that is about to end the turn
-
-This prompt is intentionally narrower than earlier revisions. The current
-implementation already removed several duplicated projections such as:
-
-- top-level duplicate `last_user_message`
-- `current_turn_user_messages`
-- `current_turn_assistant_history_before_final`
-- `current_turn_recent_timeline`
-- turn-local `request_user_input_history`
+In a case like that, the judge will often lean toward `auto_continue`. If the
+final assistant message instead opens two materially different next directions,
+it will often lean toward `ask_user`.
 
 ## What The Judge Returns
 
@@ -331,6 +268,7 @@ heuristics, then rerun `self-test`, `doctor`, and `observe`.
 - `doctor --live-judge` for a real structured probe against the configured judge endpoint
 - a deterministic self-test runner for follow-up decision regressions
 - an `observe` CLI for transcript-level judge calibration and mode/rationale inspection
+- a `print-layout` CLI for a quick repository layout snapshot
 - a runtime contract for endpoint and environment configuration
 - transcript debug events that record the judge mode and short rationale
 
@@ -343,6 +281,7 @@ heuristics, then rerun `self-test`, `doctor`, and `observe`.
 - synthetic regression coverage for ask-user, auto-continue, and end behavior
 - install-time and runtime verification commands for local environments
 - transcript-based observability for mode mix, overrides, and rationale patterns
+- an ordered `turn.entries` source-of-truth with derived judge-facing views
 
 ## Layout
 
@@ -384,6 +323,7 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --json
 PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli doctor --live-judge --json
 PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli self-test --json
 PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --json
+PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli print-layout --json
 ```
 
 ## Install
@@ -399,6 +339,12 @@ Apply the install:
 
 ```bash
 PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --json
+```
+
+Override the Python interpreter or Codex home if needed:
+
+```bash
+PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --python /path/to/python --codex-home /path/to/.codex --json
 ```
 
 What `install` does:
@@ -434,6 +380,9 @@ Inspect recent stop-hook judgments for this repo:
 PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --json
 ```
 
+By default, `observe` scopes to the current working directory. Use
+`--all-cwds` to scan every cwd instead.
+
 Focus on one historical session:
 
 ```bash
@@ -452,6 +401,12 @@ Filter calibration output to a date window:
 PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --all-cwds --date-from 2026-04-20 --date-to 2026-04-20 --json
 ```
 
+Filter to one mode or change the example count:
+
+```bash
+PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli observe --mode ask_user --limit 3 --json
+```
+
 ## Uninstall
 
 Preview the removal:
@@ -466,6 +421,12 @@ Remove the hook entries added by this package:
 PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli uninstall --json
 ```
 
+Target a different Codex home if needed:
+
+```bash
+PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli uninstall --codex-home /path/to/.codex --json
+```
+
 `uninstall` removes only the hook entries added by this package and
 leaves unrelated hook configuration intact.
 
@@ -476,8 +437,11 @@ leaves unrelated hook configuration intact.
 - `doctor`: run static package and file checks
 - `doctor --live-judge`: probe the configured judge endpoint with a structured request
 - `self-test`: run the deterministic synthetic regression suite
+  - supports `--case /path/to/test.json` for a single case
 - `observe`: summarize recorded `stop_hook_judgment` events for calibration work
   - supports repo-scoped or all-cwd scans, archived session inclusion, and date filtering
+  - supports `--session-id`, `--mode`, and `--limit` for narrower inspection
+- `print-layout`: print the repo's key paths as JSON or a plain dict
 
 ## Runtime Configuration
 
