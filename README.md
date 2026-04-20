@@ -1,7 +1,11 @@
 # codex-click-chooser-hooks
 
-A public package for Codex hook workflows that turn natural closeout messages
-into recent-session-aware tri-state follow-through decisions.
+**English** | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
+
+Translations may lag behind the English version.
+
+Codex hooks that help a turn end the right way: finish normally, continue
+automatically, or ask one clear follow-up question.
 
 ## What It Does
 
@@ -10,9 +14,9 @@ This package installs two managed Codex hooks:
 - a `SessionStart` hook that loads chooser policy on startup and resume
 - a `Stop` hook that decides whether a closeout should end normally, auto-continue in the same turn, or show a short follow-up chooser
 
-The judge model determines the `end` / `auto_continue` / `ask_user` mode. When
-`ask_user` is needed, Codex generates the actual chooser question and options
-from the live conversation context.
+The judge model picks the `end` / `auto_continue` / `ask_user` mode by looking
+at the recent conversation context. When `ask_user` is needed, Codex generates
+the actual chooser question and options from the live session context.
 
 The managed hooks are merged additively into `~/.codex/hooks.json`, and the
 `uninstall` command removes only the handlers owned by this package.
@@ -29,11 +33,11 @@ The managed hooks are merged additively into `~/.codex/hooks.json`, and the
 
 ## Current Capabilities
 
-- recent-session-aware `end` / `auto_continue` / `ask_user` logic for Codex `Stop` hooks
+- context-aware `end` / `auto_continue` / `ask_user` logic for Codex `Stop` hooks
 - an `end` override guard when the assistant message itself surfaces a follow-up choice or a clear next step
 - startup policy loading through a paired `SessionStart` hook
 - template rendering for interpreter and repo-root aware hook commands
-- synthetic regression coverage for chooser, auto-continue, and end behavior
+- synthetic regression coverage for ask-user, auto-continue, and end behavior
 - install-time and runtime verification commands for local environments
 
 ## Layout
