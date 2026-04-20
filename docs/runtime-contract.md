@@ -34,6 +34,7 @@ The judge backend must:
 - provide an OpenAI-compatible `responses` endpoint
 - support JSON structured output
 - respond within the hook timeout window
+- return `mode`, `continue_instruction`, and a short `rationale`
 
 ## Environment Variables
 
@@ -110,6 +111,19 @@ PYTHONPATH=src python3 -m codex_click_chooser_hooks.cli install --dry-run --json
 
 `doctor --live-judge` performs a structured probe using the same endpoint and
 model configuration as the real hook.
+
+The live probe and transcript debug event both surface the judge's short
+`rationale` when the endpoint provides it.
+
+At runtime, the hook may override a raw `mode="end"` if the assistant message
+itself clearly surfaces either:
+
+- multiple materially different follow-up options, which promotes the turn to
+  `ask_user`
+- one clear next step, which promotes the turn to `auto_continue`
+
+When this happens, the transcript debug event keeps the original `raw_judgment`
+and records `judgment_override` metadata for comparison.
 
 - endpoint unreachable or structured output failure: `fail`
 - endpoint reachable but no follow-up action recommendation for the sample closeout: `warn`

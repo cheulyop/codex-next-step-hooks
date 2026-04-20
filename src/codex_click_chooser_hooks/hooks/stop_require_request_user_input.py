@@ -31,6 +31,23 @@ STOP_SELECTION_TERMS = (
 RECENT_TURNS_LIMIT = 6
 RECENT_CHOOSERS_LIMIT = 6
 MAX_CONTEXT_TEXT_CHARS = 240
+FOLLOW_UP_CHOICE_PATTERNS = (
+    re.compile(r"\boptions like\b", re.IGNORECASE),
+    re.compile(r"\bwe can either\b", re.IGNORECASE),
+    re.compile(r"\beither\b[\s\S]{0,200}\bor\b", re.IGNORECASE),
+    re.compile(r"\bor we can\b", re.IGNORECASE),
+    re.compile(r"\b(two|multiple|several)\s+(obvious|natural|materially different)\s+next steps\b", re.IGNORECASE),
+    re.compile(r"\bone of (two|several|multiple)\b", re.IGNORECASE),
+    re.compile(r"(아니면|또는)"),
+)
+NEXT_STEP_PATTERNS = (
+    re.compile(r"\bthe obvious next step is to (?P<step>[^.?!\n]+)", re.IGNORECASE),
+    re.compile(r"\bthe next step is to (?P<step>[^.?!\n]+)", re.IGNORECASE),
+    re.compile(r"\bnext we should (?P<step>[^.?!\n]+)", re.IGNORECASE),
+    re.compile(r"\bnext we can (?P<step>[^.?!\n]+)", re.IGNORECASE),
+    re.compile(r"다음 단계는 (?P<step>[^.\n]+)"),
+    re.compile(r"다음으로는 (?P<step>[^.\n]+)"),
+)
 
 SYSTEM_PROMPT = """You are a Codex stop-hook judge.
 
@@ -58,9 +75,17 @@ multiple plausible branches would materially change the outcome, there is a
 tradeoff between next steps, or approval or permission is still genuinely
 unresolved.
 
-Prefer `mode="end"` when the assistant message is already a sufficient ending:
-the reply is a narrow factual confirmation, a tiny verification answer, a
-completed result with no meaningful next step, or the task should stop here.
+Prefer `mode="end"` only when the assistant message is already a sufficient
+ending and does not itself surface a meaningful next-step lane. A narrow
+factual confirmation or tiny verification may end normally only when it does
+not offer, imply, or tee up a natural follow-up action or user choice.
+
+If the assistant message explicitly surfaces next steps, follow-up options, or
+a "we can continue with..." style invitation, do not choose `mode="end"` for
+that reason alone.
+- Prefer `mode="auto_continue"` if one next step is clearly dominant.
+- Prefer `mode="ask_user"` if two or more materially different next steps are
+  surfaced.
 
 Do not treat explanatory completeness by itself as a reason to ask the user. A
 well-explained answer may still call for `auto_continue` if the next step is
@@ -92,9 +117,13 @@ When using `mode="auto_continue"`, provide a concise `continue_instruction`
 that tells Codex what to do next in the same turn. Do not ask the user in that
 mode.
 
+Always provide a concise `rationale` that explains why the selected mode fits
+the current turn. Keep it short, concrete, and grounded in the recent session
+context.
+
 Return JSON only. For `mode="auto_continue"`, provide a non-empty
 `continue_instruction`. For `mode="end"` and `mode="ask_user"`,
-`continue_instruction` may be empty.
+`continue_instruction` may be empty. `rationale` must always be non-empty.
 
 Write the header, question, labels, and descriptions in the same language as
 the assistant final message unless there is a very strong reason not to.
@@ -109,8 +138,9 @@ JUDGE_SCHEMA = {
             "enum": ["end", "auto_continue", "ask_user"],
         },
         "continue_instruction": {"type": "string"},
+        "rationale": {"type": "string"},
     },
-    "required": ["mode", "continue_instruction"],
+    "required": ["mode", "continue_instruction", "rationale"],
 }
 
 
@@ -534,8 +564,79 @@ def normalize_continue_instruction(judgment: Dict[str, Any]) -> str:
     return instruction.strip()
 
 
+def normalize_rationale(judgment: Dict[str, Any]) -> str:
+    rationale = judgment.get("rationale")
+    if not isinstance(rationale, str):
+        return ""
+    return rationale.strip()
+
+
 def ask_user_prompt_source() -> str:
     return "codex_session"
+
+
+def ends_with_terminal_punctuation(text: str) -> bool:
+    return text.endswith((".", "!", "?", "…"))
+
+
+def assistant_message_surfaces_follow_up_choice(message: str) -> bool:
+    return any(pattern.search(message) for pattern in FOLLOW_UP_CHOICE_PATTERNS)
+
+
+def extract_surfaced_next_step(message: str) -> Optional[str]:
+    for pattern in NEXT_STEP_PATTERNS:
+        match = pattern.search(message)
+        if match is None:
+            continue
+        step = match.group("step").strip()
+        if step:
+            return step
+    return None
+
+
+def apply_end_mode_overrides(
+    message: str, judgment: Dict[str, Any]
+) -> tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
+    if normalize_mode(judgment.get("mode")) != "end":
+        return judgment, None
+
+    if assistant_message_surfaces_follow_up_choice(message):
+        overridden = dict(judgment)
+        overridden["mode"] = "ask_user"
+        overridden["continue_instruction"] = ""
+        overridden["rationale"] = (
+            "The assistant message itself surfaces multiple follow-up options, "
+            "so ending here would prematurely close a natural next user choice."
+        )
+        return overridden, {
+            "from_mode": "end",
+            "to_mode": "ask_user",
+            "reason": "assistant_message_surfaces_follow_up_choice",
+        }
+
+    surfaced_next_step = extract_surfaced_next_step(message)
+    if surfaced_next_step:
+        continue_instruction = (
+            "Continue with the next step the assistant just surfaced: "
+            f"{surfaced_next_step}"
+        )
+        if not ends_with_terminal_punctuation(continue_instruction):
+            continue_instruction += "."
+        overridden = dict(judgment)
+        overridden["mode"] = "auto_continue"
+        overridden["continue_instruction"] = continue_instruction
+        overridden["rationale"] = (
+            "The assistant message already names a clear next step, so ending "
+            "here would interrupt an obvious same-turn follow-through."
+        )
+        return overridden, {
+            "from_mode": "end",
+            "to_mode": "auto_continue",
+            "reason": "assistant_message_surfaces_clear_next_step",
+            "surfaced_next_step": surfaced_next_step,
+        }
+
+    return judgment, None
 
 
 def build_stop_hook_debug_payload(
@@ -544,6 +645,8 @@ def build_stop_hook_debug_payload(
     decision: str,
     status: str,
     judgment: Optional[Dict[str, Any]] = None,
+    raw_judgment: Optional[Dict[str, Any]] = None,
+    judgment_override: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     debug_payload: Dict[str, Any] = {
         "type": "stop_hook_judgment",
@@ -559,14 +662,24 @@ def build_stop_hook_debug_payload(
 
     mode = normalize_mode(judgment.get("mode"))
     debug_payload["mode"] = mode
-    debug_payload["raw_judgment"] = judgment
+    if isinstance(raw_judgment, dict):
+        debug_payload["raw_judgment"] = raw_judgment
+    else:
+        debug_payload["raw_judgment"] = judgment
 
     continue_instruction = normalize_continue_instruction(judgment)
     if continue_instruction:
         debug_payload["continue_instruction"] = continue_instruction
 
+    rationale = normalize_rationale(judgment)
+    if rationale:
+        debug_payload["rationale"] = rationale
+
     if mode == "ask_user":
         debug_payload["ask_user_prompt_source"] = ask_user_prompt_source()
+
+    if isinstance(judgment_override, dict):
+        debug_payload["judgment_override"] = judgment_override
 
     return debug_payload
 
@@ -727,19 +840,20 @@ def should_continue(payload: Dict[str, Any]) -> bool:
             status="explicit_stop_already_selected",
         )
         return True
-    judgment = judge_should_request(
+    raw_judgment = judge_should_request(
         message,
         last_user_message,
         recent_turns,
         recent_choosers,
     )
-    if judgment is None:
+    if raw_judgment is None:
         payload["_stop_hook_debug"] = build_stop_hook_debug_payload(
             payload,
             decision="continue",
             status="judge_unavailable",
         )
         return True
+    judgment, judgment_override = apply_end_mode_overrides(message, raw_judgment)
     mode = normalize_mode(judgment.get("mode"))
     if mode == "end":
         payload["_stop_hook_debug"] = build_stop_hook_debug_payload(
@@ -747,6 +861,8 @@ def should_continue(payload: Dict[str, Any]) -> bool:
             decision="continue",
             status="mode_end",
             judgment=judgment,
+            raw_judgment=raw_judgment,
+            judgment_override=judgment_override,
         )
         return True
     if mode == "auto_continue" and not normalize_continue_instruction(judgment):
@@ -755,6 +871,8 @@ def should_continue(payload: Dict[str, Any]) -> bool:
             decision="continue",
             status="invalid_auto_continue_missing_instruction",
             judgment=judgment,
+            raw_judgment=raw_judgment,
+            judgment_override=judgment_override,
         )
         return True
     if mode != "ask_user" and mode != "auto_continue":
@@ -763,6 +881,8 @@ def should_continue(payload: Dict[str, Any]) -> bool:
             decision="continue",
             status="invalid_mode",
             judgment=judgment,
+            raw_judgment=raw_judgment,
+            judgment_override=judgment_override,
         )
         return True
     payload["_judgment"] = judgment
@@ -770,8 +890,18 @@ def should_continue(payload: Dict[str, Any]) -> bool:
     payload["_stop_hook_debug"] = build_stop_hook_debug_payload(
         payload,
         decision="block",
-        status="mode_ask_user" if mode == "ask_user" else "mode_auto_continue",
+        status=(
+            "mode_ask_user_end_override"
+            if mode == "ask_user" and judgment_override
+            else "mode_auto_continue_end_override"
+            if mode == "auto_continue" and judgment_override
+            else "mode_ask_user"
+            if mode == "ask_user"
+            else "mode_auto_continue"
+        ),
         judgment=judgment,
+        raw_judgment=raw_judgment,
+        judgment_override=judgment_override,
     )
     return False
 

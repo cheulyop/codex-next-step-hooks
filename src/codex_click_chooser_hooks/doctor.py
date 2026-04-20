@@ -86,6 +86,9 @@ def run_live_judge_probe() -> dict[str, Any]:
         "timeout_seconds": stop_hook.JUDGE_TIMEOUT_SECONDS,
         "mode": mode,
     }
+    rationale = stop_hook.normalize_rationale(judgment)
+    if rationale:
+        result["rationale"] = rationale
     if mode == "auto_continue":
         result["continue_instruction"] = stop_hook.normalize_continue_instruction(
             judgment

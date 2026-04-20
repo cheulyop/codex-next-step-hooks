@@ -1,0 +1,3 @@
+{"type":"turn_context","payload":{"turn_id":"turn-400"}}
+{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Can we make the stop hook less eager to end when a natural follow-up is still on the table?"}]}}
+{"type":"turn_context","payload":{"turn_id":"turn-401"}}

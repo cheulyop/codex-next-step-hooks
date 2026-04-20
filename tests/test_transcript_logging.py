@@ -28,7 +28,14 @@ class FakeHTTPResponse:
 
 
 class TranscriptLoggingTests(unittest.TestCase):
-    def run_main_with_judgment(self, judgment: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    def run_main_with_judgment(
+        self,
+        judgment: dict[str, Any],
+        *,
+        last_assistant_message: str = (
+            "The install is already current and the latest session policy was loaded."
+        ),
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         with tempfile.TemporaryDirectory() as temp_dir:
             transcript_path = Path(temp_dir) / "transcript.jsonl"
             transcript_path.touch()
@@ -36,7 +43,7 @@ class TranscriptLoggingTests(unittest.TestCase):
                 "turn_id": "turn-logging",
                 "transcript_path": str(transcript_path),
                 "stop_hook_active": True,
-                "last_assistant_message": "The install is already current and the latest session policy was loaded.",
+                "last_assistant_message": last_assistant_message,
             }
 
             stdin_backup = sys.stdin
@@ -69,6 +76,7 @@ class TranscriptLoggingTests(unittest.TestCase):
             {
                 "mode": "end",
                 "continue_instruction": "",
+                "rationale": "The reply is a narrow factual confirmation with no further action.",
             }
         )
 
@@ -80,11 +88,16 @@ class TranscriptLoggingTests(unittest.TestCase):
         self.assertEqual(event["payload"]["mode"], "end")
         self.assertEqual(event["payload"]["judge_model"], "gpt-5.4")
         self.assertEqual(event["payload"]["judge_reasoning_effort"], "medium")
+        self.assertEqual(
+            event["payload"]["rationale"],
+            "The reply is a narrow factual confirmation with no further action.",
+        )
 
     def test_main_logs_ask_user_judgment_to_transcript(self) -> None:
         judgment = {
             "mode": "ask_user",
             "continue_instruction": "",
+            "rationale": "The user needs to choose between materially different next steps.",
         }
         hook_output, event = self.run_main_with_judgment(judgment)
 
@@ -93,9 +106,44 @@ class TranscriptLoggingTests(unittest.TestCase):
         self.assertEqual(event["payload"]["decision"], "block")
         self.assertEqual(event["payload"]["status"], "mode_ask_user")
         self.assertEqual(event["payload"]["mode"], "ask_user")
+        self.assertEqual(
+            event["payload"]["rationale"],
+            "The user needs to choose between materially different next steps.",
+        )
         self.assertNotIn("question", event["payload"])
         self.assertNotIn("options", event["payload"])
         self.assertEqual(event["payload"]["ask_user_prompt_source"], "codex_session")
+
+    def test_main_logs_end_override_to_auto_continue(self) -> None:
+        hook_output, event = self.run_main_with_judgment(
+            {
+                "mode": "end",
+                "continue_instruction": "",
+                "rationale": "The work is already complete.",
+            },
+            last_assistant_message=(
+                "The rationale patch is done and verified.\n\n"
+                "The next step is to inspect a few mode_end rationales before weakening the end wording."
+            ),
+        )
+
+        self.assertEqual(hook_output["decision"], "block")
+        self.assertIn(
+            "Continue with the next step the assistant just surfaced:",
+            hook_output["reason"],
+        )
+        self.assertEqual(event["payload"]["decision"], "block")
+        self.assertEqual(event["payload"]["status"], "mode_auto_continue_end_override")
+        self.assertEqual(event["payload"]["mode"], "auto_continue")
+        self.assertEqual(event["payload"]["raw_judgment"]["mode"], "end")
+        self.assertEqual(
+            event["payload"]["judgment_override"]["reason"],
+            "assistant_message_surfaces_clear_next_step",
+        )
+        self.assertIn(
+            "inspect a few mode_end rationales before weakening the end wording",
+            event["payload"]["continue_instruction"],
+        )
 
 
 if __name__ == "__main__":

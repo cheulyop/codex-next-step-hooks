@@ -8,7 +8,8 @@
   },
   "judge_result": {
     "mode": "ask_user",
-    "continue_instruction": ""
+    "continue_instruction": "",
+    "rationale": "The assistant surfaced several follow-up options and the user has not chosen among them yet."
   },
   "expected": {
     "decision": "block",

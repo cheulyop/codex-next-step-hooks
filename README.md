@@ -25,10 +25,12 @@ The managed hooks are merged additively into `~/.codex/hooks.json`, and the
 - `doctor --live-judge` for a real structured probe against the configured judge endpoint
 - a deterministic self-test runner for follow-up decision regressions
 - a runtime contract for endpoint and environment configuration
+- transcript debug events that record the judge mode and short rationale
 
 ## Current Capabilities
 
 - recent-session-aware `end` / `auto_continue` / `ask_user` logic for Codex `Stop` hooks
+- an `end` override guard when the assistant message itself surfaces a follow-up choice or a clear next step
 - startup policy loading through a paired `SessionStart` hook
 - template rendering for interpreter and repo-root aware hook commands
 - synthetic regression coverage for chooser, auto-continue, and end behavior

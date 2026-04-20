@@ -41,6 +41,9 @@ class PolicyTextTests(unittest.TestCase):
         self.assertNotIn("one short single-select", SYSTEM_PROMPT)
         self.assertIn("Codex will generate the actual", SYSTEM_PROMPT)
         self.assertNotIn("provide a short `header`", SYSTEM_PROMPT)
+        self.assertIn("Always provide a concise `rationale`", SYSTEM_PROMPT)
+        self.assertIn("surface a meaningful next-step lane", SYSTEM_PROMPT)
+        self.assertIn("do not choose `mode=\"end\"`", SYSTEM_PROMPT)
 
         fallback = build_ask_user_block_reason({}, [])
         self.assertIn("Generate the chooser header, exactly one chooser question", fallback)

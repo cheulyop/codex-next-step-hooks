@@ -8,7 +8,8 @@
   },
   "judge_result": {
     "mode": "auto_continue",
-    "continue_instruction": "Update the stop-hook schema to use mode=end|auto_continue|ask_user, then split the block-reason handling so ask_user and auto_continue have separate continuation prompts."
+    "continue_instruction": "Update the stop-hook schema to use mode=end|auto_continue|ask_user, then split the block-reason handling so ask_user and auto_continue have separate continuation prompts.",
+    "rationale": "The user already chose the implementation lane and the assistant named one clear next step."
   },
   "expected": {
     "decision": "block",

@@ -1,0 +1,26 @@
+{
+  "name": "surfaced_clear_next_step_should_auto_continue",
+  "transcript_path": "tests/fixtures/completed_follow_up_recent_lane.jsonl",
+  "payload": {
+    "turn_id": "turn-401",
+    "stop_hook_active": true,
+    "last_assistant_message": "The rationale patch is done and verified.\n\nThe next step is to inspect a few mode_end rationales before weakening the end wording."
+  },
+  "judge_result": {
+    "mode": "end",
+    "continue_instruction": "",
+    "rationale": "The work that the user asked for in this turn has already been completed."
+  },
+  "expected": {
+    "decision": "block",
+    "context_contains": [
+      "The rationale patch is done and verified.",
+      "The next step is to inspect a few mode_end rationales before weakening the end wording."
+    ],
+    "reason_contains": [
+      "Do not ask the user another question or show a chooser here.",
+      "Continue immediately with this instruction:",
+      "Continue with the next step the assistant just surfaced: inspect a few mode_end rationales before weakening the end wording."
+    ]
+  }
+}

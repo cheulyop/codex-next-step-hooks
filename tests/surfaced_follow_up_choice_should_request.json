@@ -1,0 +1,26 @@
+{
+  "name": "surfaced_follow_up_choice_should_request",
+  "transcript_path": "tests/fixtures/completed_follow_up_recent_lane.jsonl",
+  "payload": {
+    "turn_id": "turn-401",
+    "stop_hook_active": true,
+    "last_assistant_message": "The rationale patch is done and verified.\n\nNext we can either inspect a few mode_end rationales or weaken the end wording."
+  },
+  "judge_result": {
+    "mode": "end",
+    "continue_instruction": "",
+    "rationale": "The work that the user asked for in this turn has already been completed."
+  },
+  "expected": {
+    "decision": "block",
+    "context_contains": [
+      "The rationale patch is done and verified.",
+      "Next we can either inspect a few mode_end rationales or weaken the end wording."
+    ],
+    "reason_contains": [
+      "Generate the chooser header, exactly one chooser question",
+      "the natural single-select options yourself",
+      "Do not ask the same or substantially similar chooser again"
+    ]
+  }
+}
