@@ -233,6 +233,130 @@ class TranscriptLoggingTests(unittest.TestCase):
             ],
         )
 
+    def test_read_recent_session_context_uses_entries_stream(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            transcript_path = Path(temp_dir) / "transcript.jsonl"
+            transcript_lines = [
+                json.dumps({"type": "turn_context", "payload": {"turn_id": "turn-entries"}}),
+                json.dumps(
+                    {
+                        "type": "event_msg",
+                        "payload": {
+                            "type": "user_message",
+                            "message": "README 설명을 보강해주세요",
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "response_item",
+                        "payload": {
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [
+                                {
+                                    "type": "output_text",
+                                    "text": "좋습니다. 먼저 README 구조를 보겠습니다.",
+                                }
+                            ],
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "response_item",
+                        "payload": {
+                            "type": "function_call",
+                            "name": "request_user_input",
+                            "call_id": "call-1",
+                            "arguments": json.dumps(
+                                {
+                                    "questions": [
+                                        {
+                                            "header": "다음 단계",
+                                            "question": "어떻게 진행할까요?",
+                                            "options": [
+                                                {
+                                                    "label": "README만",
+                                                    "description": "문서만 정리합니다.",
+                                                },
+                                                {
+                                                    "label": "README+테스트",
+                                                    "description": "문서와 테스트를 함께 봅니다.",
+                                                },
+                                            ],
+                                        }
+                                    ]
+                                }
+                            ),
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "response_item",
+                        "payload": {
+                            "type": "function_call_output",
+                            "call_id": "call-1",
+                            "output": json.dumps(
+                                {"answers": {"next_step": {"answers": ["README만"]}}}
+                            ),
+                        },
+                    }
+                ),
+            ]
+            transcript_path.write_text("\n".join(transcript_lines) + "\n")
+
+            context = stop_hook.read_recent_session_context(
+                str(transcript_path), "turn-entries"
+            )
+
+        recent_turn = context["recent_turns"][0]
+        self.assertEqual(recent_turn["turn_id"], "turn-entries")
+        self.assertIn("entries", recent_turn)
+        self.assertNotIn("user_messages", recent_turn)
+        self.assertNotIn("assistant_messages", recent_turn)
+        self.assertNotIn("requests", recent_turn)
+        self.assertNotIn("timeline", recent_turn)
+        self.assertEqual(
+            recent_turn["entries"],
+            [
+                {
+                    "kind": "message",
+                    "role": "user",
+                    "text": "README 설명을 보강해주세요",
+                },
+                {
+                    "kind": "message",
+                    "role": "assistant",
+                    "text": "좋습니다. 먼저 README 구조를 보겠습니다.",
+                },
+                {
+                    "kind": "request_user_input",
+                    "call_id": "call-1",
+                    "turn_id": "turn-entries",
+                    "header": "다음 단계",
+                    "question": "어떻게 진행할까요?",
+                    "options": [
+                        {"label": "README만", "description": "문서만 정리합니다."},
+                        {
+                            "label": "README+테스트",
+                            "description": "문서와 테스트를 함께 봅니다.",
+                        },
+                    ],
+                },
+                {
+                    "kind": "request_user_input_output",
+                    "call_id": "call-1",
+                    "turn_id": "turn-entries",
+                    "answers": ["README만"],
+                },
+            ],
+        )
+        self.assertEqual(len(context["recent_choosers"]), 1)
+        self.assertEqual(context["recent_choosers"][0]["answers"], ["README만"])
+        self.assertEqual(context["current_turn_requests"][0]["question"], "어떻게 진행할까요?")
+
     def test_main_logs_judge_unavailable_failure_reason(self) -> None:
         hook_output, event = self.run_main_with_judgment(
             None,

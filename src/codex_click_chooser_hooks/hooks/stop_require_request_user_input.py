@@ -266,26 +266,96 @@ def append_turn_message(turn: Dict[str, Any], role: str, text: str) -> None:
     if not stripped:
         return
 
-    timeline = turn.setdefault("timeline", [])
-    if timeline:
-        previous = timeline[-1]
+    entries = turn.setdefault("entries", [])
+    if entries:
+        previous = entries[-1]
         if (
-            previous.get("role") == role
+            previous.get("kind") == "message"
+            and previous.get("role") == role
             and normalize_compare_text(previous.get("text")) == normalize_compare_text(stripped)
         ):
             return
 
-    timeline.append({"role": role, "text": stripped})
-    if role == "user":
-        turn.setdefault("user_messages", []).append(stripped)
-    elif role == "assistant":
-        turn.setdefault("assistant_messages", []).append(stripped)
+    entries.append({"kind": "message", "role": role, "text": stripped})
+
+
+def request_entries_from_turn(turn: Dict[str, Any]) -> List[Dict[str, Any]]:
+    collected: List[Dict[str, Any]] = []
+    by_call_id: Dict[str, Dict[str, Any]] = {}
+    for entry in turn.get("entries", []):
+        if not isinstance(entry, dict):
+            continue
+        kind = entry.get("kind")
+        if kind == "request_user_input":
+            chooser = {
+                "call_id": entry.get("call_id"),
+                "turn_id": entry.get("turn_id"),
+                "header": entry.get("header"),
+                "question": entry.get("question"),
+                "options": normalize_options(entry.get("options")),
+                "answers": [],
+            }
+            collected.append(chooser)
+            call_id = chooser.get("call_id")
+            if isinstance(call_id, str):
+                by_call_id[call_id] = chooser
+            continue
+        if kind != "request_user_input_output":
+            continue
+        call_id = entry.get("call_id")
+        if not isinstance(call_id, str):
+            continue
+        previous = by_call_id.get(call_id)
+        if previous is None:
+            continue
+        answers = normalize_answer_list(entry.get("answers"))
+        if answers:
+            previous["answers"].extend(answers)
+    return collected
+
+
+def timeline_entries_from_turn(turn: Dict[str, Any]) -> List[Dict[str, str]]:
+    timeline: List[Dict[str, str]] = []
+    for entry in turn.get("entries", []):
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("kind") != "message":
+            continue
+        role = entry.get("role")
+        text = entry.get("text")
+        if role in {"user", "assistant"} and isinstance(text, str) and text.strip():
+            timeline.append({"role": role, "text": text.strip()})
+    return timeline
+
+
+def recent_messages_by_role(
+    timeline: List[Dict[str, str]], role: str, limit: int
+) -> List[str]:
+    collected = [
+        item["text"]
+        for item in timeline
+        if item.get("role") == role and isinstance(item.get("text"), str) and item["text"].strip()
+    ]
+    return collected[-limit:]
+
+
+def last_user_message_for_turn(turn: Dict[str, Any]) -> str:
+    timeline = timeline_entries_from_turn(turn)
+    for item in range(len(timeline) - 1, -1, -1):
+        candidate = timeline[item]
+        if candidate.get("role") == "user":
+            return candidate.get("text", "")
+    return ""
 
 
 def summarize_current_turn(turn: Dict[str, Any]) -> Dict[str, Any]:
-    timeline = turn.get("timeline", [])
-    user_messages = list(turn.get("user_messages", []))
-    assistant_messages = list(turn.get("assistant_messages", []))
+    timeline = timeline_entries_from_turn(turn)
+    user_messages = recent_messages_by_role(
+        timeline, "user", CURRENT_TURN_MESSAGES_LIMIT
+    )
+    assistant_messages = recent_messages_by_role(
+        timeline, "assistant", CURRENT_TURN_MESSAGES_LIMIT
+    )
     assistant_messages_since_last_user: List[str] = []
     recent_timeline: List[Dict[str, str]] = []
 
@@ -323,11 +393,13 @@ def summarize_current_turn(turn: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "turn_id": turn.get("turn_id"),
-        "user_message_count": len(user_messages),
-        "assistant_message_count": len(assistant_messages),
-        "request_count": len(turn.get("requests", [])),
-        "recent_user_messages": user_messages[-CURRENT_TURN_MESSAGES_LIMIT:],
-        "recent_assistant_messages": assistant_messages[-CURRENT_TURN_MESSAGES_LIMIT:],
+        "user_message_count": len([item for item in timeline if item.get("role") == "user"]),
+        "assistant_message_count": len(
+            [item for item in timeline if item.get("role") == "assistant"]
+        ),
+        "request_count": len(request_entries_from_turn(turn)),
+        "recent_user_messages": user_messages,
+        "recent_assistant_messages": assistant_messages,
         "assistant_messages_since_last_user": len(assistant_messages_since_last_user),
         "assistant_messages_since_last_user_texts": assistant_messages_since_last_user[
             -CURRENT_TURN_MESSAGES_LIMIT:
@@ -401,10 +473,7 @@ def read_recent_session_context(
             return existing
         created = {
             "turn_id": current_turn_id,
-            "user_messages": [],
-            "assistant_messages": [],
-            "requests": [],
-            "timeline": [],
+            "entries": [],
         }
         turns.append(created)
         turn_by_id[current_turn_id] = created
@@ -461,10 +530,16 @@ def read_recent_session_context(
                 parsed = parse_request_user_input_question(payload.get("arguments", ""))
                 if parsed is None:
                     continue
-                parsed["call_id"] = call_id
-                parsed["turn_id"] = current_turn["turn_id"]
-                current_turn["requests"].append(parsed)
-                pending_by_call_id[call_id] = parsed
+                request_entry = {
+                    "kind": "request_user_input",
+                    "call_id": call_id,
+                    "turn_id": current_turn["turn_id"],
+                    "header": parsed.get("header"),
+                    "question": parsed.get("question"),
+                    "options": parsed.get("options"),
+                }
+                current_turn.setdefault("entries", []).append(request_entry)
+                pending_by_call_id[call_id] = request_entry
                 continue
 
             if payload.get("type") == "function_call_output":
@@ -474,8 +549,13 @@ def read_recent_session_context(
                 previous = pending_by_call_id.get(call_id)
                 if previous is None:
                     continue
-                previous["answers"] = extract_request_user_input_answers(
-                    payload.get("output", "")
+                current_turn.setdefault("entries", []).append(
+                    {
+                        "kind": "request_user_input_output",
+                        "call_id": call_id,
+                        "turn_id": current_turn["turn_id"],
+                        "answers": extract_request_user_input_answers(payload.get("output", "")),
+                    }
                 )
 
     target_index = -1
@@ -494,7 +574,7 @@ def read_recent_session_context(
     recent_turns = turns[max(0, target_index - RECENT_TURNS_LIMIT + 1) : target_index + 1]
     recent_choosers: List[Dict[str, Any]] = []
     for turn in recent_turns:
-        for request in turn.get("requests", []):
+        for request in request_entries_from_turn(turn):
             recent_choosers.append(request)
     recent_choosers = recent_choosers[-RECENT_CHOOSERS_LIMIT:]
 
@@ -502,7 +582,7 @@ def read_recent_session_context(
     current_turn_context: Dict[str, Any] = {}
     if recent_turns:
         current_turn_summary = recent_turns[-1]
-        current_turn_requests = list(current_turn_summary.get("requests", []))
+        current_turn_requests = list(request_entries_from_turn(current_turn_summary))
         current_turn_context = summarize_current_turn(current_turn_summary)
 
     return {
@@ -527,15 +607,10 @@ def parse_request_user_input_question(arguments: str) -> Optional[Dict[str, Any]
         "header": question.get("header"),
         "question": question.get("question"),
         "options": normalize_options(question.get("options")),
-        "answers": [],
     }
 
 
-def extract_request_user_input_answers(output: str) -> List[str]:
-    payload = parse_json_object(output)
-    if not isinstance(payload, dict):
-        return []
-    answers_block = payload.get("answers")
+def extract_request_user_input_answers_from_value(answers_block: Any) -> List[str]:
     if not isinstance(answers_block, dict):
         return []
     collected: List[str] = []
@@ -549,6 +624,23 @@ def extract_request_user_input_answers(output: str) -> List[str]:
             if isinstance(answer, str) and answer.strip():
                 collected.append(answer.strip())
     return collected
+
+
+def normalize_answer_list(raw_answers: Any) -> List[str]:
+    if not isinstance(raw_answers, list):
+        return []
+    collected: List[str] = []
+    for answer in raw_answers:
+        if isinstance(answer, str) and answer.strip():
+            collected.append(answer.strip())
+    return collected
+
+
+def extract_request_user_input_answers(output: str) -> List[str]:
+    payload = parse_json_object(output)
+    if not isinstance(payload, dict):
+        return []
+    return extract_request_user_input_answers_from_value(payload.get("answers"))
 
 
 def chooser_option_labels(chooser: Dict[str, Any]) -> List[str]:
@@ -583,9 +675,9 @@ def judge_should_request(
         context_parts.extend(["", "<recent_session_context>"])
         for turn in recent_turns:
             context_parts.append(f'<turn id="{turn.get("turn_id", "")}">')
-            user_messages = turn.get("user_messages", [])
-            if user_messages:
-                rendered_last_user_message = compact_render_text(user_messages[-1], 240)
+            last_user_message = last_user_message_for_turn(turn)
+            if last_user_message:
+                rendered_last_user_message = compact_render_text(last_user_message, 240)
                 context_parts.extend(
                     [
                         "<last_user_message>",
