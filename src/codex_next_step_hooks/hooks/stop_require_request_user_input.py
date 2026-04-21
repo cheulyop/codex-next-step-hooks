@@ -1282,6 +1282,46 @@ def build_debug_current_turn_context(payload: Dict[str, Any]) -> Dict[str, Any]:
     return summary
 
 
+def build_end_additional_context(payload: Dict[str, Any]) -> str:
+    parts = [
+        "The turn is ending normally.",
+        "Before you finish, add a closing summary of the work completed since the latest substantive user message.",
+        "Do not ask another next-step question or introduce new work.",
+        "Make the summary detailed, concrete, and grounded in the work that already happened in this turn.",
+        "Keep it intuitive and easy to read so the user can quickly grasp the flow of the work.",
+    ]
+
+    context = payload.get("_current_turn_context")
+    if not isinstance(context, dict) or not context:
+        return "\n".join(parts)
+
+    anchor_message = compact_render_text(
+        context.get("last_substantive_user_message"),
+        200,
+    )
+    if anchor_message:
+        parts.extend(
+            [
+                "",
+                "Latest substantive user message:",
+                f"- {anchor_message}",
+            ]
+        )
+
+    assistant_messages = [
+        compact_render_text(message, 200)
+        for message in context.get("assistant_messages_since_last_user_texts", [])
+        if compact_render_text(message, 200)
+    ]
+    if assistant_messages:
+        parts.append("")
+        parts.append("Assistant work since that message:")
+        for message in assistant_messages:
+            parts.append(f"- {message}")
+
+    return "\n".join(parts)
+
+
 def build_stop_hook_debug_payload(
     payload: Dict[str, Any],
     *,
@@ -1516,6 +1556,7 @@ def should_continue(payload: Dict[str, Any]) -> bool:
     judgment, judgment_override = apply_end_mode_overrides(message, raw_judgment)
     mode = normalize_mode(judgment.get("mode"))
     if mode == "end":
+        payload["_hook_additional_context"] = build_end_additional_context(payload)
         payload["_stop_hook_debug"] = build_stop_hook_debug_payload(
             payload,
             decision="continue",
@@ -1570,7 +1611,14 @@ def main() -> int:
     payload = json.load(sys.stdin)
     if should_continue(payload):
         append_stop_hook_debug_event(payload)
-        print(json.dumps({"continue": True}))
+        hook_output: Dict[str, Any] = {"continue": True}
+        additional_context = payload.get("_hook_additional_context")
+        if isinstance(additional_context, str) and additional_context.strip():
+            hook_output["hookSpecificOutput"] = {
+                "hookEventName": "Stop",
+                "additionalContext": additional_context,
+            }
+        print(json.dumps(hook_output))
         return 0
 
     append_stop_hook_debug_event(payload)

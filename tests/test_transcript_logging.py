@@ -92,7 +92,19 @@ class TranscriptLoggingTests(unittest.TestCase):
             }
         )
 
-        self.assertEqual(hook_output, {"continue": True})
+        self.assertEqual(hook_output["continue"], True)
+        self.assertEqual(
+            hook_output["hookSpecificOutput"]["hookEventName"],
+            "Stop",
+        )
+        self.assertIn(
+            "Before you finish, add a closing summary",
+            hook_output["hookSpecificOutput"]["additionalContext"],
+        )
+        self.assertIn(
+            "Make the summary detailed, concrete, and grounded",
+            hook_output["hookSpecificOutput"]["additionalContext"],
+        )
         self.assertEqual(event["type"], "event_msg")
         self.assertEqual(event["payload"]["type"], "stop_hook_judgment")
         self.assertEqual(event["payload"]["decision"], "continue")
@@ -200,7 +212,7 @@ class TranscriptLoggingTests(unittest.TestCase):
                 }
             ),
         ]
-        _, event = self.run_main_with_judgment(
+        hook_output, event = self.run_main_with_judgment(
             {
                 "mode": "end",
                 "continue_instruction": "",
@@ -240,6 +252,20 @@ class TranscriptLoggingTests(unittest.TestCase):
         self.assertEqual(
             context["timeline_since_last_user"][2]["text"],
             "The config flag is still missing in the current runtime path.",
+        )
+        self.assertEqual(hook_output["continue"], True)
+        self.assertIn("hookSpecificOutput", hook_output)
+        additional_context = hook_output["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("Latest substantive user message:", additional_context)
+        self.assertIn("Go ahead and keep moving.", additional_context)
+        self.assertIn("Assistant work since that message:", additional_context)
+        self.assertIn(
+            "I checked the launcher path first.",
+            additional_context,
+        )
+        self.assertIn(
+            "The config flag is still missing in the current runtime path.",
+            additional_context,
         )
 
     def test_read_recent_session_context_uses_entries_stream(self) -> None:
