@@ -1282,13 +1282,17 @@ def build_debug_current_turn_context(payload: Dict[str, Any]) -> Dict[str, Any]:
     return summary
 
 
-def build_end_additional_context(payload: Dict[str, Any]) -> str:
+def build_end_summary_block_reason(payload: Dict[str, Any]) -> str:
     parts = [
-        "The turn is ending normally.",
-        "Before you finish, add a closing summary of the work completed since the latest substantive user message.",
+        "Do not ask the user another next-step question here.",
+        "The turn should end after one more assistant response.",
+        "",
+        "Before ending, write a closing summary of the work completed since the latest substantive user message.",
         "Do not ask another next-step question or introduce new work.",
+        "Summarize only the work that already happened in this turn.",
         "Make the summary detailed, concrete, and grounded in the work that already happened in this turn.",
         "Keep it intuitive and easy to read so the user can quickly grasp the flow of the work.",
+        "After writing the closing summary, finish normally.",
     ]
 
     context = payload.get("_current_turn_context")
@@ -1320,6 +1324,25 @@ def build_end_additional_context(payload: Dict[str, Any]) -> str:
             parts.append(f"- {message}")
 
     return "\n".join(parts)
+
+
+def should_request_end_summary_pass(payload: Dict[str, Any]) -> bool:
+    if payload.get("stop_hook_active"):
+        return False
+
+    context = payload.get("_current_turn_context")
+    if not isinstance(context, dict) or not context:
+        return False
+
+    anchor_message = context.get("last_substantive_user_message")
+    if not isinstance(anchor_message, str) or not anchor_message.strip():
+        return False
+
+    assistant_messages = context.get("assistant_messages_since_last_user_texts")
+    if not isinstance(assistant_messages, list):
+        return False
+
+    return any(isinstance(message, str) and message.strip() for message in assistant_messages)
 
 
 def build_stop_hook_debug_payload(
@@ -1556,7 +1579,21 @@ def should_continue(payload: Dict[str, Any]) -> bool:
     judgment, judgment_override = apply_end_mode_overrides(message, raw_judgment)
     mode = normalize_mode(judgment.get("mode"))
     if mode == "end":
-        payload["_hook_additional_context"] = build_end_additional_context(payload)
+        if should_request_end_summary_pass(payload):
+            payload["_custom_block_reason"] = build_end_summary_block_reason(payload)
+            payload["_stop_hook_debug"] = build_stop_hook_debug_payload(
+                payload,
+                decision="block",
+                status="mode_end_summary_continuation",
+                judgment=judgment,
+                raw_judgment=raw_judgment,
+                judgment_override={
+                    "from_mode": "end",
+                    "to_mode": "end",
+                    "reason": "end_requires_closing_summary_pass",
+                },
+            )
+            return False
         payload["_stop_hook_debug"] = build_stop_hook_debug_payload(
             payload,
             decision="continue",
@@ -1611,17 +1648,21 @@ def main() -> int:
     payload = json.load(sys.stdin)
     if should_continue(payload):
         append_stop_hook_debug_event(payload)
-        hook_output: Dict[str, Any] = {"continue": True}
-        additional_context = payload.get("_hook_additional_context")
-        if isinstance(additional_context, str) and additional_context.strip():
-            hook_output["hookSpecificOutput"] = {
-                "hookEventName": "Stop",
-                "additionalContext": additional_context,
-            }
-        print(json.dumps(hook_output))
+        print(json.dumps({"continue": True}))
         return 0
 
     append_stop_hook_debug_event(payload)
+    custom_block_reason = payload.get("_custom_block_reason")
+    if isinstance(custom_block_reason, str) and custom_block_reason.strip():
+        print(
+            json.dumps(
+                {
+                    "decision": "block",
+                    "reason": custom_block_reason,
+                }
+            )
+        )
+        return 0
     print(
         json.dumps(
             {

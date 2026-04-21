@@ -36,6 +36,7 @@ class TranscriptLoggingTests(unittest.TestCase):
         last_assistant_message: str = (
             "The install is already current and the latest session policy was loaded."
         ),
+        stop_hook_active: bool = True,
         transcript_lines: list[str] | None = None,
         response_payload: dict[str, Any] | None = None,
         urlopen_exception: Exception | None = None,
@@ -49,7 +50,7 @@ class TranscriptLoggingTests(unittest.TestCase):
             payload = {
                 "turn_id": "turn-logging",
                 "transcript_path": str(transcript_path),
-                "stop_hook_active": True,
+                "stop_hook_active": stop_hook_active,
                 "last_assistant_message": last_assistant_message,
             }
 
@@ -92,19 +93,7 @@ class TranscriptLoggingTests(unittest.TestCase):
             }
         )
 
-        self.assertEqual(hook_output["continue"], True)
-        self.assertEqual(
-            hook_output["hookSpecificOutput"]["hookEventName"],
-            "Stop",
-        )
-        self.assertIn(
-            "Before you finish, add a closing summary",
-            hook_output["hookSpecificOutput"]["additionalContext"],
-        )
-        self.assertIn(
-            "Make the summary detailed, concrete, and grounded",
-            hook_output["hookSpecificOutput"]["additionalContext"],
-        )
+        self.assertEqual(hook_output, {"continue": True})
         self.assertEqual(event["type"], "event_msg")
         self.assertEqual(event["payload"]["type"], "stop_hook_judgment")
         self.assertEqual(event["payload"]["decision"], "continue")
@@ -253,20 +242,78 @@ class TranscriptLoggingTests(unittest.TestCase):
             context["timeline_since_last_user"][2]["text"],
             "The config flag is still missing in the current runtime path.",
         )
-        self.assertEqual(hook_output["continue"], True)
-        self.assertIn("hookSpecificOutput", hook_output)
-        additional_context = hook_output["hookSpecificOutput"]["additionalContext"]
-        self.assertIn("Latest substantive user message:", additional_context)
-        self.assertIn("Go ahead and keep moving.", additional_context)
-        self.assertIn("Assistant work since that message:", additional_context)
-        self.assertIn(
-            "I checked the launcher path first.",
-            additional_context,
+        self.assertEqual(hook_output, {"continue": True})
+
+    def test_main_turns_end_into_one_safe_summary_continuation(self) -> None:
+        transcript_lines = [
+            json.dumps({"type": "turn_context", "payload": {"turn_id": "turn-logging"}}),
+            json.dumps(
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "message",
+                        "role": "user",
+                        "content": [
+                            {"type": "input_text", "text": "Go ahead and keep moving."}
+                        ],
+                    },
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [
+                            {"type": "output_text", "text": "I checked the launcher path first."}
+                        ],
+                    },
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "response_item",
+                    "payload": {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": "The config flag is still missing in the current runtime path.",
+                            }
+                        ],
+                    },
+                }
+            ),
+        ]
+
+        hook_output, event = self.run_main_with_judgment(
+            {
+                "mode": "end",
+                "continue_instruction": "",
+                "rationale": "The explanation already covered the current question.",
+            },
+            last_assistant_message=(
+                "The config flag is still missing in the current runtime path."
+            ),
+            stop_hook_active=False,
+            transcript_lines=transcript_lines,
         )
+
+        self.assertEqual(hook_output["decision"], "block")
+        self.assertIn("Before ending, write a closing summary", hook_output["reason"])
+        self.assertIn("Latest substantive user message:", hook_output["reason"])
+        self.assertIn("Go ahead and keep moving.", hook_output["reason"])
+        self.assertIn("Assistant work since that message:", hook_output["reason"])
+        self.assertIn("I checked the launcher path first.", hook_output["reason"])
         self.assertIn(
             "The config flag is still missing in the current runtime path.",
-            additional_context,
+            hook_output["reason"],
         )
+        self.assertEqual(event["payload"]["decision"], "block")
+        self.assertEqual(event["payload"]["status"], "mode_end_summary_continuation")
+        self.assertEqual(event["payload"]["mode"], "end")
 
     def test_read_recent_session_context_uses_entries_stream(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
