@@ -26,8 +26,8 @@ class ObserveTests(unittest.TestCase):
     def test_run_observe_summarizes_repo_scoped_judgments(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             sessions_root = Path(temp_dir) / "sessions"
-            repo_cwd = "/Users/cheul/Projects/codex-next-step-hooks"
-            other_cwd = "/Users/cheul/Projects/other-repo"
+            repo_cwd = "/workspace/codex-next-step-hooks"
+            other_cwd = "/workspace/other-repo"
 
             write_rollout(
                 sessions_root
@@ -121,7 +121,7 @@ class ObserveTests(unittest.TestCase):
     def test_run_observe_filters_by_session_id_and_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             sessions_root = Path(temp_dir) / "sessions"
-            repo_cwd = "/Users/cheul/Projects/codex-next-step-hooks"
+            repo_cwd = "/workspace/codex-next-step-hooks"
             target_session_id = "019da333-3333-7333-8333-333333333333"
 
             write_rollout(
@@ -179,7 +179,7 @@ class ObserveTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             sessions_root = Path(temp_dir) / "sessions"
             archived_root = Path(temp_dir) / "archived_sessions"
-            repo_cwd = "/Users/cheul/Projects/codex-next-step-hooks"
+            repo_cwd = "/workspace/codex-next-step-hooks"
 
             write_rollout(
                 sessions_root

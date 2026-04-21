@@ -33,6 +33,69 @@ RECENT_QUESTIONS_LIMIT = 6
 CURRENT_TURN_MESSAGES_LIMIT = 3
 CURRENT_TURN_TIMELINE_LIMIT = 12
 MAX_CONTEXT_TEXT_CHARS = 240
+
+# These helpers support lightweight same-lane filtering for recent
+# request_user_input history. We classify obvious user-side context blobs
+# separately, then compare anchor texts by token overlap after dropping
+# generic stopwords.
+USER_CONTEXT_BLOB_PREFIXES = ("<skill>", "<environment_context>")
+LANE_TOKEN_PATTERN = re.compile(r"[0-9a-zA-Z가-힣_+-]+")
+COMMON_LANE_TOKENS = {
+    "a",
+    "an",
+    "and",
+    "can",
+    "could",
+    "for",
+    "from",
+    "how",
+    "into",
+    "me",
+    "my",
+    "our",
+    "please",
+    "review",
+    "should",
+    "the",
+    "then",
+    "tell",
+    "this",
+    "use",
+    "using",
+    "we",
+    "what",
+    "which",
+    "would",
+    "with",
+    "you",
+    "그리고",
+    "그런데",
+    "그럼",
+    "금방",
+    "나온",
+    "노션",
+    "다시",
+    "다음",
+    "방법",
+    "바로",
+    "부탁",
+    "사용자",
+    "어떤",
+    "어떻게",
+    "여기",
+    "요청",
+    "이어",
+    "이제",
+    "이전",
+    "있으면",
+    "있는",
+    "지금",
+    "질문",
+    "최근",
+    "함께",
+    "확인",
+    "해주세요",
+}
 FOLLOW_UP_CHOICE_PATTERNS = (
     re.compile(r"\boptions like\b", re.IGNORECASE),
     re.compile(r"\bwe can either\b", re.IGNORECASE),
@@ -261,7 +324,59 @@ def is_runtime_control_message(text: Optional[str]) -> bool:
     return stripped.startswith("<turn_aborted>") or stripped.startswith("<hook_prompt")
 
 
-def append_turn_message(turn: Dict[str, Any], role: str, text: str) -> None:
+def is_user_context_blob_message(text: Optional[str]) -> bool:
+    if not isinstance(text, str):
+        return False
+    stripped = text.lstrip()
+    return any(stripped.startswith(prefix) for prefix in USER_CONTEXT_BLOB_PREFIXES)
+
+
+def classify_user_message_kind(text: Optional[str]) -> str:
+    if is_user_context_blob_message(text):
+        return "context"
+    return "intent"
+
+
+def compact_timestamp(timestamp: Optional[str]) -> str:
+    if not isinstance(timestamp, str):
+        return ""
+    match = re.search(r"T(\d{2}:\d{2}:\d{2})", timestamp)
+    if match is None:
+        return ""
+    return match.group(1)
+
+
+def lane_tokens(text: Optional[str]) -> set[str]:
+    if not isinstance(text, str):
+        return set()
+    normalized = normalize_compare_text(text)
+    normalized = re.sub(r"https?://\S+", " ", normalized)
+    normalized = re.sub(r"\[[^\]]*\]\([^)]*\)", " ", normalized)
+    normalized = re.sub(r"<[^>]+>", " ", normalized)
+    tokens = {
+        token
+        for token in LANE_TOKEN_PATTERN.findall(normalized)
+        if len(token) >= 2
+        and not token.isdigit()
+        and token not in COMMON_LANE_TOKENS
+    }
+    return tokens
+
+
+def texts_share_lane(left: Optional[str], right: Optional[str]) -> bool:
+    left_tokens = lane_tokens(left)
+    right_tokens = lane_tokens(right)
+    if not left_tokens or not right_tokens:
+        return False
+    shared = left_tokens & right_tokens
+    if len(shared) < 2:
+        return False
+    return len(shared) / min(len(left_tokens), len(right_tokens)) >= 0.35
+
+
+def append_turn_message(
+    turn: Dict[str, Any], role: str, text: str, timestamp: Optional[str] = None
+) -> None:
     stripped = text.strip()
     if not stripped:
         return
@@ -276,7 +391,17 @@ def append_turn_message(turn: Dict[str, Any], role: str, text: str) -> None:
         ):
             return
 
-    entries.append({"kind": "message", "role": role, "text": stripped})
+    entry: Dict[str, Any] = {
+        "kind": "message",
+        "role": role,
+        "text": stripped,
+        "seq": len(entries) + 1,
+    }
+    if isinstance(timestamp, str) and timestamp:
+        entry["timestamp"] = timestamp
+    if role == "user":
+        entry["message_kind"] = classify_user_message_kind(stripped)
+    entries.append(entry)
 
 
 def request_entries_from_turn(turn: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -295,6 +420,15 @@ def request_entries_from_turn(turn: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "options": normalize_options(entry.get("options")),
                 "answers": [],
             }
+            for field in (
+                "anchor_turn_id",
+                "anchor_text",
+                "anchor_seq",
+                "anchor_timestamp",
+            ):
+                value = entry.get(field)
+                if value is not None:
+                    question_request[field] = value
             collected.append(question_request)
             call_id = question_request.get("call_id")
             if isinstance(call_id, str):
@@ -314,8 +448,8 @@ def request_entries_from_turn(turn: Dict[str, Any]) -> List[Dict[str, Any]]:
     return collected
 
 
-def timeline_entries_from_turn(turn: Dict[str, Any]) -> List[Dict[str, str]]:
-    timeline: List[Dict[str, str]] = []
+def timeline_entries_from_turn(turn: Dict[str, Any]) -> List[Dict[str, Any]]:
+    timeline: List[Dict[str, Any]] = []
     for entry in turn.get("entries", []):
         if not isinstance(entry, dict):
             continue
@@ -324,12 +458,19 @@ def timeline_entries_from_turn(turn: Dict[str, Any]) -> List[Dict[str, str]]:
         role = entry.get("role")
         text = entry.get("text")
         if role in {"user", "assistant"} and isinstance(text, str) and text.strip():
-            timeline.append({"role": role, "text": text.strip()})
+            item: Dict[str, Any] = {"role": role, "text": text.strip()}
+            if isinstance(entry.get("seq"), int):
+                item["seq"] = entry.get("seq")
+            if isinstance(entry.get("timestamp"), str):
+                item["timestamp"] = entry.get("timestamp")
+            if isinstance(entry.get("message_kind"), str):
+                item["message_kind"] = entry.get("message_kind")
+            timeline.append(item)
     return timeline
 
 
 def recent_messages_by_role(
-    timeline: List[Dict[str, str]], role: str, limit: int
+    timeline: List[Dict[str, Any]], role: str, limit: int
 ) -> List[str]:
     collected = [
         item["text"]
@@ -339,40 +480,81 @@ def recent_messages_by_role(
     return collected[-limit:]
 
 
-def last_user_message_for_turn(turn: Dict[str, Any]) -> str:
+def last_substantive_user_entry_for_turn(turn: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     timeline = timeline_entries_from_turn(turn)
     for item in range(len(timeline) - 1, -1, -1):
         candidate = timeline[item]
-        if candidate.get("role") == "user":
-            return candidate.get("text", "")
-    return ""
+        if candidate.get("role") != "user":
+            continue
+        if candidate.get("message_kind") == "context":
+            continue
+        return candidate
+    return None
+
+
+def last_substantive_user_message_for_turn(turn: Dict[str, Any]) -> str:
+    entry = last_substantive_user_entry_for_turn(turn)
+    if entry is None:
+        return ""
+    return entry.get("text", "")
+
+
+def request_anchor_metadata_for_turn(turn: Dict[str, Any]) -> Dict[str, Any]:
+    entry = last_substantive_user_entry_for_turn(turn)
+    if entry is None:
+        return {}
+
+    metadata: Dict[str, Any] = {
+        "anchor_turn_id": turn.get("turn_id"),
+        "anchor_text": entry.get("text"),
+    }
+    if isinstance(entry.get("seq"), int):
+        metadata["anchor_seq"] = entry.get("seq")
+    if isinstance(entry.get("timestamp"), str) and entry.get("timestamp"):
+        metadata["anchor_timestamp"] = entry.get("timestamp")
+    return metadata
 
 
 def summarize_current_turn(turn: Dict[str, Any]) -> Dict[str, Any]:
     timeline = timeline_entries_from_turn(turn)
+    substantive_user_messages = [
+        item
+        for item in timeline
+        if item.get("role") == "user" and item.get("message_kind") != "context"
+    ]
     user_messages = recent_messages_by_role(
-        timeline, "user", CURRENT_TURN_MESSAGES_LIMIT
+        substantive_user_messages or timeline, "user", CURRENT_TURN_MESSAGES_LIMIT
     )
     assistant_messages = recent_messages_by_role(
         timeline, "assistant", CURRENT_TURN_MESSAGES_LIMIT
     )
     assistant_messages_since_last_user: List[str] = []
-    recent_timeline: List[Dict[str, str]] = []
+    recent_timeline: List[Dict[str, Any]] = []
 
     last_user_index: Optional[int] = None
     for index in range(len(timeline) - 1, -1, -1):
         item = timeline[index]
-        if item.get("role") == "user":
-            last_user_index = index
-            break
+        if item.get("role") != "user":
+            continue
+        if item.get("message_kind") == "context":
+            continue
+        last_user_index = index
+        break
+
+    if last_user_index is None:
+        for index in range(len(timeline) - 1, -1, -1):
+            item = timeline[index]
+            if item.get("role") == "user":
+                last_user_index = index
+                break
 
     for item in timeline[-CURRENT_TURN_TIMELINE_LIMIT:]:
         role = item.get("role")
         text = item.get("text")
         if role in {"user", "assistant"} and isinstance(text, str) and text.strip():
-            recent_timeline.append({"role": role, "text": text.strip()})
+            recent_timeline.append(item)
 
-    timeline_since_last_user: List[Dict[str, str]] = []
+    timeline_since_last_user: List[Dict[str, Any]] = []
     start_index = (
         last_user_index
         if last_user_index is not None
@@ -382,7 +564,7 @@ def summarize_current_turn(turn: Dict[str, Any]) -> Dict[str, Any]:
         role = item.get("role")
         text = item.get("text")
         if role in {"user", "assistant"} and isinstance(text, str) and text.strip():
-            timeline_since_last_user.append({"role": role, "text": text.strip()})
+            timeline_since_last_user.append(item)
 
     if last_user_index is not None:
         for item in timeline[last_user_index + 1 :]:
@@ -400,6 +582,16 @@ def summarize_current_turn(turn: Dict[str, Any]) -> Dict[str, Any]:
         "request_count": len(request_entries_from_turn(turn)),
         "recent_user_messages": user_messages,
         "recent_assistant_messages": assistant_messages,
+        "last_substantive_user_message": (
+            substantive_user_messages[-1].get("text", "")
+            if substantive_user_messages
+            else ""
+        ),
+        "last_substantive_user_time": (
+            compact_timestamp(substantive_user_messages[-1].get("timestamp"))
+            if substantive_user_messages
+            else ""
+        ),
         "assistant_messages_since_last_user": len(assistant_messages_since_last_user),
         "assistant_messages_since_last_user_texts": assistant_messages_since_last_user[
             -CURRENT_TURN_MESSAGES_LIMIT:
@@ -434,8 +626,8 @@ def prior_assistant_messages_before_final(
 
 def summarize_timeline_entries(
     entries: Any, max_chars: int = MAX_CONTEXT_TEXT_CHARS
-) -> List[Dict[str, str]]:
-    summarized: List[Dict[str, str]] = []
+) -> List[Dict[str, Any]]:
+    summarized: List[Dict[str, Any]] = []
     if not isinstance(entries, list):
         return summarized
     for item in entries:
@@ -444,7 +636,15 @@ def summarize_timeline_entries(
         role = item.get("role")
         text = compact_render_text(item.get("text"), max_chars)
         if role in {"user", "assistant"} and text:
-            summarized.append({"role": role, "text": text})
+            summarized_item: Dict[str, Any] = {"role": role, "text": text}
+            if isinstance(item.get("seq"), int):
+                summarized_item["seq"] = item.get("seq")
+            if isinstance(item.get("message_kind"), str):
+                summarized_item["message_kind"] = item.get("message_kind")
+            time_text = compact_timestamp(item.get("timestamp"))
+            if time_text:
+                summarized_item["time"] = time_text
+            summarized.append(summarized_item)
     return summarized
 
 
@@ -499,11 +699,13 @@ def read_recent_session_context(
             if item_type == "event_msg" and payload.get("type") == "user_message":
                 message = payload.get("message")
                 if (
-                    isinstance(message, str)
+                            isinstance(message, str)
                     and message.strip()
                     and not is_runtime_control_message(message)
                 ):
-                    append_turn_message(current_turn, "user", message)
+                    append_turn_message(
+                        current_turn, "user", message, item.get("timestamp")
+                    )
                 continue
 
             if item_type != "response_item":
@@ -515,9 +717,13 @@ def read_recent_session_context(
                 if text:
                     if role == "user":
                         if not is_runtime_control_message(text):
-                            append_turn_message(current_turn, "user", text)
+                            append_turn_message(
+                                current_turn, "user", text, item.get("timestamp")
+                            )
                     elif role == "assistant":
-                        append_turn_message(current_turn, "assistant", text)
+                        append_turn_message(
+                            current_turn, "assistant", text, item.get("timestamp")
+                        )
                 continue
 
             if (
@@ -538,6 +744,7 @@ def read_recent_session_context(
                     "question": parsed.get("question"),
                     "options": parsed.get("options"),
                 }
+                request_entry.update(request_anchor_metadata_for_turn(current_turn))
                 current_turn.setdefault("entries", []).append(request_entry)
                 pending_request_call_ids.add(call_id)
                 continue
@@ -663,6 +870,83 @@ def latest_answer_is_explicit_stop(history: List[Dict[str, Any]]) -> bool:
     return False
 
 
+def filter_recent_questions_to_current_lane(
+    recent_turns: List[Dict[str, Any]],
+    recent_questions: List[Dict[str, Any]],
+    current_turn_context: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    if not recent_questions:
+        return []
+
+    current_anchor = current_turn_context.get("last_substantive_user_message")
+    if not isinstance(current_anchor, str) or not current_anchor.strip():
+        return recent_questions[-RECENT_QUESTIONS_LIMIT:]
+
+    current_turn_id = current_turn_context.get("turn_id")
+    turns_by_id = {
+        turn.get("turn_id"): turn
+        for turn in recent_turns
+        if isinstance(turn, dict) and isinstance(turn.get("turn_id"), str)
+    }
+
+    filtered: List[Dict[str, Any]] = []
+    for question_request in recent_questions:
+        turn_id = question_request.get("turn_id")
+        if turn_id == current_turn_id:
+            filtered.append(question_request)
+            continue
+
+        anchor_text = question_request.get("anchor_text")
+        if (
+            isinstance(anchor_text, str)
+            and anchor_text.strip()
+            and normalize_compare_text(anchor_text) == normalize_compare_text(current_anchor)
+        ):
+            filtered.append(question_request)
+            continue
+
+        # Prefer the anchor text recorded at request time. Only fall back to
+        # lexical lane matching for older transcripts that do not have anchor
+        # metadata, or for paraphrased follow-ups that still look like the same
+        # lane.
+        anchor_candidate = anchor_text
+        if not isinstance(anchor_candidate, str) or not anchor_candidate.strip():
+            turn = turns_by_id.get(turn_id)
+            if turn is None:
+                continue
+            anchor_candidate = last_substantive_user_message_for_turn(turn)
+
+        if texts_share_lane(current_anchor, anchor_candidate):
+            filtered.append(question_request)
+
+    return filtered[-RECENT_QUESTIONS_LIMIT:]
+
+
+def render_timeline_item(item: Dict[str, Any]) -> str:
+    seq = item.get("seq")
+    time_text = item.get("time") or compact_timestamp(item.get("timestamp"))
+    role = item.get("role")
+    message_kind = item.get("message_kind")
+    if role == "user" and not isinstance(message_kind, str):
+        message_kind = classify_user_message_kind(item.get("text"))
+
+    prefix_parts: List[str] = []
+    if isinstance(seq, int):
+        prefix_parts.append(f"{seq:02d}")
+    if time_text:
+        prefix_parts.append(time_text)
+    if role == "user" and isinstance(message_kind, str):
+        prefix_parts.append(f"user:{message_kind}")
+    elif isinstance(role, str):
+        prefix_parts.append(role)
+
+    prefix = " ".join(f"[{part}]" for part in prefix_parts)
+    text = item.get("text", "")
+    if prefix:
+        return f"- {prefix} {text}"
+    return f"- {text}"
+
+
 def judge_should_request(
     last_assistant_message: str,
     recent_turns: List[Dict[str, Any]],
@@ -673,17 +957,22 @@ def judge_should_request(
     if recent_turns:
         context_parts.extend(["", "<recent_session_context>"])
         for turn in recent_turns:
+            last_user_entry = last_substantive_user_entry_for_turn(turn)
+            if last_user_entry is None:
+                continue
             context_parts.append(f'<turn id="{turn.get("turn_id", "")}">')
-            last_user_message = last_user_message_for_turn(turn)
-            if last_user_message:
-                rendered_last_user_message = compact_render_text(last_user_message, 240)
-                context_parts.extend(
-                    [
-                        "<last_user_message>",
-                        rendered_last_user_message,
-                        "</last_user_message>",
-                    ]
+            rendered_last_user_message = compact_render_text(
+                last_user_entry.get("text"), 240
+            )
+            time_text = compact_timestamp(last_user_entry.get("timestamp"))
+            if time_text:
+                context_parts.append(
+                    f'<last_substantive_user_message time="{time_text}">'
                 )
+            else:
+                context_parts.append("<last_substantive_user_message>")
+            context_parts.append(rendered_last_user_message)
+            context_parts.append("</last_substantive_user_message>")
             context_parts.append("</turn>")
         context_parts.append("</recent_session_context>")
     if current_turn_context:
@@ -704,6 +993,20 @@ def judge_should_request(
             "- assistant_messages_since_last_user: "
             f"{current_turn_context.get('assistant_messages_since_last_user', 0)}"
         )
+        anchor_message = compact_render_text(
+            current_turn_context.get("last_substantive_user_message"),
+            200,
+        )
+        if anchor_message:
+            anchor_time = current_turn_context.get("last_substantive_user_time")
+            if isinstance(anchor_time, str) and anchor_time:
+                context_parts.append(
+                    f"- last_substantive_user_message[{anchor_time}]: {anchor_message}"
+                )
+            else:
+                context_parts.append(
+                    f"- last_substantive_user_message: {anchor_message}"
+                )
         context_parts.append("</current_turn_state>")
 
         timeline_since_last_user = summarize_timeline_entries(
@@ -712,8 +1015,11 @@ def judge_should_request(
         )
         if timeline_since_last_user:
             context_parts.extend(["", "<current_turn_timeline_since_last_user>"])
-            for item in timeline_since_last_user:
-                context_parts.append(f"- {item['role']}: {item['text']}")
+            for index, item in enumerate(timeline_since_last_user, start=1):
+                rendered_item = dict(item)
+                if not isinstance(rendered_item.get("seq"), int):
+                    rendered_item["seq"] = index
+                context_parts.append(render_timeline_item(rendered_item))
             context_parts.append("</current_turn_timeline_since_last_user>")
     if recent_questions:
         context_parts.extend(["", "<recent_question_summary>"])
@@ -937,6 +1243,16 @@ def build_debug_current_turn_context(payload: Dict[str, Any]) -> Dict[str, Any]:
     ]
     if recent_user_messages:
         summary["recent_user_messages"] = recent_user_messages
+
+    anchor_message = compact_render_text(
+        context.get("last_substantive_user_message"),
+        160,
+    )
+    if anchor_message:
+        summary["last_substantive_user_message"] = anchor_message
+        anchor_time = context.get("last_substantive_user_time")
+        if isinstance(anchor_time, str) and anchor_time:
+            summary["last_substantive_user_time"] = anchor_time
 
     last_assistant_message = payload.get("last_assistant_message")
     if isinstance(last_assistant_message, str) and last_assistant_message.strip():
@@ -1169,6 +1485,11 @@ def should_continue(payload: Dict[str, Any]) -> bool:
         recent_questions = context.get("recent_questions", [])
         current_turn_requests = context.get("current_turn_requests", [])
         current_turn_context = context.get("current_turn_context", {})
+    relevant_recent_questions = filter_recent_questions_to_current_lane(
+        recent_turns,
+        recent_questions,
+        current_turn_context,
+    )
     if current_turn_context:
         payload["_current_turn_context"] = current_turn_context
     if latest_answer_is_explicit_stop(current_turn_requests):
@@ -1181,7 +1502,7 @@ def should_continue(payload: Dict[str, Any]) -> bool:
     raw_judgment, judge_failure_reason = judge_should_request(
         message,
         recent_turns,
-        recent_questions,
+        relevant_recent_questions,
         current_turn_context,
     )
     if raw_judgment is None:
@@ -1225,7 +1546,7 @@ def should_continue(payload: Dict[str, Any]) -> bool:
         )
         return True
     payload["_judgment"] = judgment
-    payload["_recent_questions"] = recent_questions
+    payload["_recent_questions"] = relevant_recent_questions
     payload["_stop_hook_debug"] = build_stop_hook_debug_payload(
         payload,
         decision="block",
